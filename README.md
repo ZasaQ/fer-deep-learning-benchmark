@@ -104,7 +104,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 
 | Transformation | Value | Rationale |
 |---------------|-------|-----------|
-| `rotation_range` | **10°** | Moderate rotation – natural head pose variations |
+| `rotation_range` | **20°** | Moderate rotation – natural head pose variations |
 | `width_shift_range` | **0.08** (8%) | Moderate shifts – off-center simulation |
 | `height_shift_range` | **0.08** (8%) | Moderate shifts – off-center simulation |
 | `zoom_range` | **0.1** (±10%) | Different camera distances |
@@ -120,7 +120,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 
 | Transformation | Value | Rationale |
 |---------------|-------|-----------|
-| `rotation_range` | **15°** | Larger rotations – compensates for label noise |
+| `rotation_range` | **30°** | Larger rotations – compensates for label noise |
 | `width_shift_range` | **0.1** (10%) | Stronger shifts |
 | `height_shift_range` | **0.1** (10%) | Stronger shifts |
 | `zoom_range` | **0.15** (±15%) | Greater scale variance |
@@ -138,7 +138,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 
 | Transformation | Value | Rationale |
 |---------------|-------|-----------|
-| `rotation_range` | **20°** | **Maximum** – real-world head pose angles |
+| `rotation_range` | **45°** | **Maximum** – real-world head pose angles |
 | `width_shift_range` | **0.15** (15%) | Strong shifts – diverse framing |
 | `height_shift_range` | **0.15** (15%) | Strong shifts – diverse framing |
 | `zoom_range` | **0.2** (±20%) | Very different distances |
@@ -177,6 +177,8 @@ Data augmentation is a key component in training FER models; however, **the inte
 
 ## Complete Training Strategy Matrix
 
+## Complete Training Strategy Matrix
+
 | Model | Dataset | Strategy | LR | Batch | Epochs | Dropout (conv) | Dropout (dense) | Dense Units | Weight Decay | Augmentation | ES Patience | ES Min Delta | LR Patience | LR Factor | Min LR |
 |-------|---------|----------|-------|-------|--------|----------------|-----------------|-------------|--------------|--------------|-------------|--------------|-------------|-----------|--------|
 | **SimpleCNN** | FER2013 | Baseline | 1e-3 | 64 | 100 | 0.25 | 0.5 | 256 | 1e-4 | Aggressive | 20 | **1e-3** | 7 | **0.5** | **1e-7** |
@@ -187,6 +189,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 | **VGG16** | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
 | **VGG16** | CK+ | TL | 5e-4 | 16 | 80 | - | 0.6 | 128 | 5e-4 | Conservative | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
 | **VGG16** | CK+ | PFT | 5e-5 | 16 | 100 | - | 0.6 | 128 | 5e-4 | Medium | 20 | **3e-4** | 7 | **0.5** | **1e-7** |
+| **VGG16** | CK+ | FFT | 1e-5 | 16 | 120 | - | 0.6 | 128 | 5e-4 | Medium | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
 | **VGG16** | RAF-DB | TL | 1e-3 | 32 | 50 | - | 0.5 | 256 | 1e-4 | Aggressive | 10 | **1e-3** | 3 | **0.5** | **1e-7** |
 | **VGG16** | RAF-DB | PFT | 1e-4 | 32 | 80 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
 | **VGG16** | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
@@ -195,6 +198,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 | **ResNet50** | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
 | **ResNet50** | CK+ | TL | 5e-4 | 16 | 80 | - | 0.6 | 128 | 5e-4 | Conservative | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
 | **ResNet50** | CK+ | PFT | 5e-5 | 16 | 100 | - | 0.6 | 128 | 5e-4 | Medium | 20 | **3e-4** | 7 | **0.5** | **1e-7** |
+| **ResNet50** | CK+ | FFT | 5e-6 | 16 | 120 | - | 0.6 | 128 | 5e-4 | Medium | 25 | **2e-4** | 8 | **0.3** | **1e-8** |
 | **ResNet50** | RAF-DB | TL | 1e-3 | 64 | 50 | - | 0.5 | 256 | 1e-4 | Aggressive | 10 | **1e-3** | 3 | **0.5** | **1e-7** |
 | **ResNet50** | RAF-DB | PFT | 1e-4 | 64 | 80 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
 | **ResNet50** | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
@@ -203,10 +207,19 @@ Data augmentation is a key component in training FER models; however, **the inte
 | **MobileNetV2** | FER2013 | FFT | 1e-5 | 64 | 100 | - | 0.4 | 128 | 1e-4 | Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
 | **MobileNetV2** | CK+ | TL | 5e-4 | 32 | 80 | - | 0.5 | 64 | 5e-4 | Conservative | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
 | **MobileNetV2** | CK+ | PFT | 5e-5 | 32 | 100 | - | 0.5 | 64 | 5e-4 | Medium | 20 | **3e-4** | 7 | **0.5** | **1e-7** |
-| **MobileNetV2** | CK+ | FFT | 5e-6 | 16 | 100 | - | 0.6 | 64 | 1e-3 | Maximum | 20 | **2e-4** | 7 | **0.5** | **1e-8** |
+| **MobileNetV2** | CK+ | FFT | 5e-6 | 16 | 100 | - | 0.6 | 64 | 1e-3 | Medium | 20 | **2e-4** | 7 | **0.5** | **1e-8** |
 | **MobileNetV2** | RAF-DB | TL | 1e-3 | 64 | 50 | - | 0.4 | 128 | 1e-4 | Aggressive | 10 | **1e-3** | 3 | **0.5** | **1e-7** |
 | **MobileNetV2** | RAF-DB | PFT | 1e-4 | 64 | 80 | - | 0.4 | 128 | 1e-4 | Very Aggressive | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
 | **MobileNetV2** | RAF-DB | FFT | 1e-5 | 64 | 100 | - | 0.4 | 128 | 1e-4 | Very Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
+| **EfficientNetB0** | FER2013 | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | **1e-3** | 3 | **0.5** | **1e-7** |
+| **EfficientNetB0** | FER2013 | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Medium | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
+| **EfficientNetB0** | FER2013 | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
+| **EfficientNetB0** | CK+ | TL | 3e-4 | 16 | 80 | - | 0.4 | 64 | 1e-4 | Conservative | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
+| **EfficientNetB0** | CK+ | PFT | 3e-5 | 16 | 100 | - | 0.4 | 64 | 1e-4 | Conservative | 20 | **3e-4** | 7 | **0.5** | **1e-7** |
+| **EfficientNetB0** | CK+ | FFT | 3e-6 | 16 | 120 | - | 0.5 | 64 | 5e-4 | Medium | 25 | **2e-4** | 8 | **0.3** | **1e-8** |
+| **EfficientNetB0** | RAF-DB | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | **1e-3** | 3 | **0.5** | **1e-7** |
+| **EfficientNetB0** | RAF-DB | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Aggressive | 15 | **5e-4** | 5 | **0.5** | **1e-7** |
+| **EfficientNetB0** | RAF-DB | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | **3e-4** | 7 | **0.3** | **1e-8** |
 
 
 ## Key Features

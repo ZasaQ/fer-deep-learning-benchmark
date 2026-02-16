@@ -157,7 +157,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 | Transformation | Conservative | Medium | Aggressive | Very Aggressive |
 |---------------|-------------|--------|------------|-----------------|
 | **Dataset** | CK+ | FERPlus | FER2013 | RAF-DB |
-| **Rotation** | 10° | 10° | 15° | 20° |
+| **Rotation** | 10° | 20° | 30° | 45° |
 | **Width Shift** | 0.05 | 0.08 | 0.1 | 0.15 |
 | **Height Shift** | 0.05 | 0.08 | 0.1 | 0.15 |
 | **Zoom** | 0.1 | 0.1 | 0.15 | 0.2 |

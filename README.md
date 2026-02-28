@@ -181,9 +181,9 @@ Data augmentation is a key component in training FER models; however, **the inte
 
 ---
 
-## Global Defaults
+## Training Strategy
 
-### Global defaults (niezmienne we wszystkich konfiguracjach)
+### Global default parameters
 
 | Parameter            | Value                   |
 |----------------------|-------------------------|
@@ -195,7 +195,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 | Horizontal flip      | True                    |
 | Fill mode            | constant                |
 
-### Strategy-level defaults
+### Strategy-level default parameters
 
 | Strategy | LR Factor | Min LR |
 |----------|-----------|--------|
@@ -203,7 +203,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 | PFT      | 0.5       | 1e-7   |
 | FFT      | 0.3       | 1e-8   |
 
-### Dataset-level defaults
+### Dataset-level default parameters
 
 | Dataset   | Class weights | Label smoothing |
 |-----------|---------------|-----------------|
@@ -214,7 +214,7 @@ Data augmentation is a key component in training FER models; however, **the inte
 
 ---
 
-## Complete Training Strategy Matrix
+### Complete Training Strategy Matrix
 
 | Model | Dataset | Strategy | Learning Rate | Batch | Epochs | Dropout (conv) | Dropout (dense) | Dense Units | Weight Decay | Augmentation | ES Patience | ES Min Delta | LR Patience | LR Factor | Min LR |
 |-------|---------|----------|-------|-------|--------|----------------|-----------------|-------------|--------------|--------------|-------------|--------------|-------------|-----------|--------|

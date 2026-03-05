@@ -272,6 +272,15 @@ Data augmentation is a key component in training FER models; however, **the inte
 | **EfficientNetB0** | Affectnet | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
 
 ---
+### TFLite Conversion
+
+| Variant | Method | Compression | I/O Type | Calibration Data |
+|---------|--------|-------------|----------|-----------------|
+| `float32` | Direct conversion, no quantization | ~1× | float32 / float32 | Not required |
+| `dynamic_range` | Weights quantized to INT8, activations remain float32 | ~4× | float32 / float32 | Not required |
+| `int8` | Full INT8 — weights and activations quantized | ~15× | int8 / int8 | Required (default: 20% of train set, min. 100 samples) |
+
+---
 
 ## Key Features
 
@@ -281,13 +290,8 @@ Data augmentation is a key component in training FER models; however, **the inte
 - Per-class performance metrics (precision, recall, F1-score)
 - Confusion matrices (absolute counts + normalized percentages)
 - Training history visualization (accuracy, loss, learning rate)
-
-### Production-Ready Models
-- **TFLite conversion** with multiple optimization strategies:
-  - `default`: Weight quantization (~4x compression)
-  - `quantized`: Full INT8 quantization (~15x compression)
 - **Real-time inference**: 250-800 FPS (CPU)
-- Keras vs TFLite accuracy comparison
+- Keras vs TFLite accuracy comparison across all 3 variants
 - Deployment-ready model artifacts
 
 ### Advanced Visualizations

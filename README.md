@@ -15,8 +15,7 @@
 - [Architectures](#architectures)
 - [Transfer Learning Strategies](#transfer-learning-strategies)
 - [Data Augmentation Summary](#data-augmentation-summary)
-- [Global Defaults](#global-defaults)
-- [Complete Training Strategy Matrix](#complete-training-strategy-matrix)
+- [Training Configuration](#training-configuration)
 - [Key Features](#key-features)
 
 ---
@@ -41,7 +40,7 @@ This repository contains a systematic comparison of **5 deep learning architectu
 | **FER2013** | 35,887 | 7 | 48×48 | Grayscale | Noisy (crowd-sourced) | 2013 |
 | **CK+** | 981 | 7 | Various | Grayscale | Clean (controlled lab) | 2010 |
 | **RAF-DB** | 15,339 | 7 | Various | RGB | In-the-wild | 2017 |
-| **Affectnet** | ~30,000 | 8 | Various | RGB | In-the-wild (balanced subset) | 2017 |
+| **Affectnet** | ~30,000 | 7 | Various | RGB | In-the-wild (balanced subset) | 2017 |
 
 ### Emotion Classes
 
@@ -54,7 +53,6 @@ FER2013, CK+ and RAF-DB use 7 emotion categories. Affectnet uses 8 (with the add
 - Sad
 - Surprise
 - Neutral
-- Contempt *(Affectnet only)*
 
 ---
 
@@ -181,98 +179,98 @@ Data augmentation is a key component in training FER models; however, **the inte
 
 ---
 
-## Training Strategy
+## Training Configuration
 
-### Global default parameters
+### Global Default Parameters
 
-| Parameter            | Value                   |
-|----------------------|-------------------------|
-| Optimizer            | Adam                    |
-| Loss                 | CategoricalCrossentropy |
-| Metrics              | accuracy                |
-| Checkpoint monitor   | val_loss (min)          |
-| Restore best weights | True                    |
-| Horizontal flip      | True                    |
-| Fill mode            | constant                |
+| Parameter | Value |
+|---|---|
+| Optimizer | Adam |
+| Loss | CategoricalCrossentropy |
+| Metrics | Accuracy |
+| Checkpoint monitor | val_loss (min) |
+| Restore best weights | True |
+| Horizontal flip | True |
+| Fill mode | constant |
 
-### Strategy-level default parameters
+### Strategy-Level Default Parameters
 
 | Strategy | LR Factor | Min LR |
-|----------|-----------|--------|
-| TL       | 0.5       | 1e-7   |
-| PFT      | 0.5       | 1e-7   |
-| FFT      | 0.3       | 1e-8   |
+|---|---|---|
+| TL | 0.5 | 1e-7 |
+| PFT | 0.5 | 1e-7 |
+| FFT | 0.3 | 1e-8 |
 
-### Dataset-level default parameters
+### Dataset-Level Default Parameters
 
-| Dataset   | Class weights | Label smoothing |
-|-----------|---------------|-----------------|
-| FER2013   | balanced      | 0.10            |
-| CK+       | balanced      | 0.05            |
-| RAF-DB    | off           | 0.05            |
-| Affectnet | off           | 0.05            |
+| Dataset | Class Weights | Label Smoothing |
+|---|---|---|
+| FER2013 | balanced | 0.10 |
+| CK+ | balanced | 0.05 |
+| RAF-DB | off | 0.05 |
+| AffectNet | off | 0.05 |
+
+### Full Training Strategy Matrix
+
+52 experiment configurations across 5 architectures (SimpleCNN, VGG16, ResNet50, MobileNetV2, EfficientNetB0), 4 datasets (FER2013, CK+, RAF-DB, AffectNet), and up to 3 training strategies per model (Baseline, TL, PFT, FFT).
+
+| ID | Model | Dataset | Strategy | Learning Rate | Batch | Epochs | Drop (conv) | Drop (dense) | Dense Units | Weight Decay | Augmentation | ES Patience | ES Min Delta | Learning Rate Patience | Learning Rate Factor | Min Learning Rate |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 01 | SimpleCNN | FER2013 | Baseline | 1e-3 | 64 | 100 | 0.25 | 0.5 | 256 | 1e-4 | Aggressive | 20 | 1e-3 | 7 | 0.5 | 1e-7 |
+| 02 | SimpleCNN | CK+ | Baseline | 5e-4 | 32 | 150 | 0.3 | 0.6 | 128 | 1e-3 | Conservative | 25 | 5e-4 | 8 | 0.5 | 1e-7 |
+| 03 | SimpleCNN | RAF-DB | Baseline | 1e-3 | 64 | 100 | 0.25 | 0.5 | 256 | 1e-4 | Aggressive | 20 | 1e-3 | 7 | 0.5 | 1e-7 |
+| 04 | SimpleCNN | AffectNet | Baseline | 1e-3 | 64 | 100 | 0.25 | 0.5 | 256 | 1e-4 | Medium | 20 | 1e-3 | 7 | 0.5 | 1e-7 |
+| 05 | VGG16 | FER2013 | TL | 1e-3 | 32 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 06 | VGG16 | FER2013 | PFT | 1e-4 | 32 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 07 | VGG16 | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 08 | VGG16 | CK+ | TL | 5e-4 | 16 | 80 | - | 0.6 | 128 | 5e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 09 | VGG16 | CK+ | PFT | 5e-5 | 16 | 100 | - | 0.6 | 128 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
+| 10 | VGG16 | CK+ | FFT | 8e-6 | 16 | 100 | - | 0.6 | 128 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 11 | VGG16 | RAF-DB | TL | 1e-3 | 32 | 50 | - | 0.5 | 256 | 1e-4 | Aggressive | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 12 | VGG16 | RAF-DB | PFT | 1e-4 | 32 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 13 | VGG16 | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 14 | VGG16 | AffectNet | TL | 1e-3 | 32 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 15 | VGG16 | AffectNet | PFT | 1e-4 | 32 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 16 | VGG16 | AffectNet | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 17 | ResNet50 | FER2013 | TL | 1e-3 | 64 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 18 | ResNet50 | FER2013 | PFT | 1e-4 | 64 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 19 | ResNet50 | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 20 | ResNet50 | CK+ | TL | 5e-4 | 16 | 80 | - | 0.6 | 128 | 5e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 21 | ResNet50 | CK+ | PFT | 5e-5 | 16 | 100 | - | 0.6 | 128 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
+| 22 | ResNet50 | CK+ | FFT | 5e-6 | 16 | 120 | - | 0.6 | 128 | 5e-4 | Medium | 20 | 2e-4 | 8 | 0.3 | 1e-8 |
+| 23 | ResNet50 | RAF-DB | TL | 1e-3 | 64 | 50 | - | 0.5 | 256 | 1e-4 | Aggressive | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 24 | ResNet50 | RAF-DB | PFT | 1e-4 | 64 | 80 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 25 | ResNet50 | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 26 | ResNet50 | AffectNet | TL | 1e-3 | 64 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 27 | ResNet50 | AffectNet | PFT | 1e-4 | 64 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 28 | ResNet50 | AffectNet | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 29 | MobileNetV2 | FER2013 | TL | 1e-3 | 64 | 50 | - | 0.4 | 128 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 30 | MobileNetV2 | FER2013 | PFT | 1e-4 | 64 | 80 | - | 0.4 | 128 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 31 | MobileNetV2 | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.4 | 128 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 32 | MobileNetV2 | CK+ | TL | 5e-4 | 32 | 80 | - | 0.5 | 64 | 5e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 33 | MobileNetV2 | CK+ | PFT | 5e-5 | 32 | 100 | - | 0.5 | 64 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
+| 34 | MobileNetV2 | CK+ | FFT | 5e-6 | 16 | 100 | - | 0.5 | 64 | 5e-4 | Medium | 20 | 2e-4 | 7 | 0.3 | 1e-8 |
+| 35 | MobileNetV2 | RAF-DB | TL | 1e-3 | 64 | 50 | - | 0.4 | 128 | 1e-4 | Aggressive | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 36 | MobileNetV2 | RAF-DB | PFT | 1e-4 | 64 | 80 | - | 0.4 | 128 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 37 | MobileNetV2 | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.4 | 128 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 38 | MobileNetV2 | AffectNet | TL | 1e-3 | 64 | 50 | - | 0.4 | 128 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 39 | MobileNetV2 | AffectNet | PFT | 1e-4 | 64 | 80 | - | 0.4 | 128 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 40 | MobileNetV2 | AffectNet | FFT | 1e-5 | 32 | 100 | - | 0.4 | 128 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 41 | EfficientNetB0 | FER2013 | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 42 | EfficientNetB0 | FER2013 | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Medium | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 43 | EfficientNetB0 | FER2013 | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 44 | EfficientNetB0 | CK+ | TL | 3e-4 | 16 | 80 | - | 0.4 | 64 | 1e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 45 | EfficientNetB0 | CK+ | PFT | 3e-5 | 16 | 100 | - | 0.4 | 64 | 1e-4 | Conservative | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
+| 46 | EfficientNetB0 | CK+ | FFT | 5e-6 | 16 | 100 | - | 0.5 | 64 | 5e-4 | Medium | 20 | 2e-4 | 8 | 0.3 | 1e-8 |
+| 47 | EfficientNetB0 | RAF-DB | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 48 | EfficientNetB0 | RAF-DB | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 49 | EfficientNetB0 | RAF-DB | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
+| 50 | EfficientNetB0 | AffectNet | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
+| 51 | EfficientNetB0 | AffectNet | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Medium | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
+| 52 | EfficientNetB0 | AffectNet | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
 
 ---
-
-### Complete Training Strategy Matrix
-
-| Model | Dataset | Strategy | Learning Rate | Batch | Epochs | Dropout (conv) | Dropout (dense) | Dense Units | Weight Decay | Augmentation | ES Patience | ES Min Delta | LR Patience | LR Factor | Min LR |
-|-------|---------|----------|-------|-------|--------|----------------|-----------------|-------------|--------------|--------------|-------------|--------------|-------------|-----------|--------|
-| **SimpleCNN** | FER2013 | Baseline | 1e-3 | 64 | 100 | 0.25 | 0.5 | 256 | 1e-4 | Aggressive | 20 | 1e-3 | 7 | 0.5 | 1e-7 |
-| **SimpleCNN** | CK+ | Baseline | 5e-4 | 32 | 150 | 0.3 | 0.6 | 128 | 1e-3 | Conservative | 25 | 5e-4 | 8 | 0.5 | 1e-7 |
-| **SimpleCNN** | RAF-DB | Baseline | 1e-3 | 64 | 100 | 0.25 | 0.5 | 256 | 1e-4 | Aggressive | 20 | 1e-3 | 7 | 0.5 | 1e-7 |
-| **SimpleCNN** | Affectnet | Baseline | 1e-3 | 64 | 100 | 0.25 | 0.5 | 256 | 1e-4 | Medium | 20 | 1e-3 | 7 | 0.5 | 1e-7 |
-| **VGG16** | FER2013 | TL | 1e-3 | 32 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **VGG16** | FER2013 | PFT | 1e-4 | 32 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **VGG16** | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **VGG16** | CK+ | TL | 5e-4 | 16 | 80 | - | 0.6 | 128 | 5e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **VGG16** | CK+ | PFT | 5e-5 | 16 | 100 | - | 0.6 | 128 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
-| **VGG16** | CK+ | FFT | 5e-6 | 16 | 120 | - | 0.6 | 128 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **VGG16** | RAF-DB | TL | 1e-3 | 32 | 50 | - | 0.5 | 256 | 1e-4 | Aggressive | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **VGG16** | RAF-DB | PFT | 1e-4 | 32 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **VGG16** | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **VGG16** | Affectnet | TL | 1e-3 | 32 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **VGG16** | Affectnet | PFT | 1e-4 | 32 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **VGG16** | Affectnet | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **ResNet50** | FER2013 | TL | 1e-3 | 64 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **ResNet50** | FER2013 | PFT | 1e-4 | 64 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **ResNet50** | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **ResNet50** | CK+ | TL | 5e-4 | 16 | 80 | - | 0.6 | 128 | 5e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **ResNet50** | CK+ | PFT | 5e-5 | 16 | 100 | - | 0.6 | 128 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
-| **ResNet50** | CK+ | FFT | 5e-6 | 16 | 120 | - | 0.6 | 128 | 5e-4 | Medium | 25 | 2e-4 | 8 | 0.3 | 1e-8 |
-| **ResNet50** | RAF-DB | TL | 1e-3 | 64 | 50 | - | 0.5 | 256 | 1e-4 | Aggressive | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **ResNet50** | RAF-DB | PFT | 1e-4 | 64 | 80 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **ResNet50** | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Very Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **ResNet50** | Affectnet | TL | 1e-3 | 64 | 50 | - | 0.5 | 256 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **ResNet50** | Affectnet | PFT | 1e-4 | 64 | 80 | - | 0.5 | 256 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **ResNet50** | Affectnet | FFT | 1e-5 | 32 | 100 | - | 0.5 | 256 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **MobileNetV2** | FER2013 | TL | 1e-3 | 64 | 50 | - | 0.4 | 128 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **MobileNetV2** | FER2013 | PFT | 1e-4 | 64 | 80 | - | 0.4 | 128 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **MobileNetV2** | FER2013 | FFT | 1e-5 | 32 | 100 | - | 0.4 | 128 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **MobileNetV2** | CK+ | TL | 5e-4 | 32 | 80 | - | 0.5 | 64 | 5e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **MobileNetV2** | CK+ | PFT | 5e-5 | 32 | 100 | - | 0.5 | 64 | 5e-4 | Medium | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
-| **MobileNetV2** | CK+ | FFT | 5e-6 | 16 | 100 | - | 0.6 | 64 | 1e-3 | Medium | 20 | 2e-4 | 7 | 0.3 | 1e-8 |
-| **MobileNetV2** | RAF-DB | TL | 1e-3 | 64 | 50 | - | 0.4 | 128 | 1e-4 | Aggressive | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **MobileNetV2** | RAF-DB | PFT | 1e-4 | 64 | 80 | - | 0.4 | 128 | 1e-4 | Very Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **MobileNetV2** | RAF-DB | FFT | 1e-5 | 32 | 100 | - | 0.4 | 128 | 1e-4 | Very Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **MobileNetV2** | Affectnet | TL | 1e-3 | 64 | 50 | - | 0.4 | 128 | 1e-4 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **MobileNetV2** | Affectnet | PFT | 1e-4 | 64 | 80 | - | 0.4 | 128 | 1e-4 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **MobileNetV2** | Affectnet | FFT | 1e-5 | 32 | 100 | - | 0.4 | 128 | 1e-4 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **EfficientNetB0** | FER2013 | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **EfficientNetB0** | FER2013 | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Medium | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **EfficientNetB0** | FER2013 | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **EfficientNetB0** | CK+ | TL | 3e-4 | 16 | 80 | - | 0.4 | 64 | 1e-4 | Conservative | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **EfficientNetB0** | CK+ | PFT | 3e-5 | 16 | 100 | - | 0.4 | 64 | 1e-4 | Conservative | 20 | 3e-4 | 7 | 0.5 | 1e-7 |
-| **EfficientNetB0** | CK+ | FFT | 3e-6 | 16 | 120 | - | 0.5 | 64 | 5e-4 | Medium | 25 | 2e-4 | 8 | 0.3 | 1e-8 |
-| **EfficientNetB0** | RAF-DB | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **EfficientNetB0** | RAF-DB | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Aggressive | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **EfficientNetB0** | RAF-DB | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-| **EfficientNetB0** | Affectnet | TL | 5e-4 | 64 | 50 | - | 0.3 | 128 | 5e-5 | Medium | 10 | 1e-3 | 3 | 0.5 | 1e-7 |
-| **EfficientNetB0** | Affectnet | PFT | 5e-5 | 64 | 80 | - | 0.3 | 128 | 5e-5 | Medium | 15 | 5e-4 | 5 | 0.5 | 1e-7 |
-| **EfficientNetB0** | Affectnet | FFT | 5e-6 | 32 | 100 | - | 0.3 | 128 | 5e-5 | Aggressive | 20 | 3e-4 | 7 | 0.3 | 1e-8 |
-
----
-### TFLite Conversion
+## TFLite Conversion
 
 | Variant | Method | Compression | I/O Type | Calibration Data |
 |---------|--------|-------------|----------|-----------------|

@@ -6,6 +6,7 @@ from collections import defaultdict
 from PIL import Image
 from tqdm import tqdm
 import os
+from google.colab import files
 
 
 # ── Split ────────────────────────────────────────────────────────────────────
@@ -199,6 +200,18 @@ def list_files(startpath):
         sub_indent = ' ' * 4 * (level + 1)
         for f in files:
             print(f'{sub_indent}{f}')
+
+
+# ── Zip & Download with Google Colab ──────────────────────────────────────────────────────────────────
+
+def zip_and_download(folder_path):
+    folder_path = folder_path.rstrip('/')
+    output_filename = f"{os.path.basename(folder_path)}.zip"
+
+    shutil.make_archive(folder_path, 'zip', folder_path)
+    print(f"Archive created: {output_filename}")
+
+    files.download(output_filename)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

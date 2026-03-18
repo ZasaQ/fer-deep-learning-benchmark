@@ -5,6 +5,7 @@ from pathlib import Path
 from collections import defaultdict
 from PIL import Image
 from tqdm import tqdm
+import os
 
 
 # ── Split ────────────────────────────────────────────────────────────────────
@@ -185,6 +186,19 @@ def resize_dataset_inplace(src_root, target_size=(224, 224), workers=8):
     print(f"\nDone: {ok}/{len(tasks)} images resized successfully")
     if failed:
         print(f"Failed: {failed} images — check errors above")
+
+
+# ── List Files ───────────────────────────────────────────────────────────────────
+
+def list_files(startpath):
+    for root, dirs, files in os.walk(startpath):
+        level = root.replace(startpath, '').count(os.sep)
+        indent = ' ' * 4 * (level)
+        print(f'{indent}{os.path.basename(root)}/')
+        
+        sub_indent = ' ' * 4 * (level + 1)
+        for f in files:
+            print(f'{sub_indent}{f}')
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

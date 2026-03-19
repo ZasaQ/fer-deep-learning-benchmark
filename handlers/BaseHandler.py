@@ -5,14 +5,37 @@ from typing import Optional, List
 class BaseHandler:
     """
     Shared base for all FER experiment handlers.
-    Provides guard checks, summary table printing and archive directory management.
-    Handlers that produce plots should inherit from BaseVisualizer instead.
+    Provides visualization saving, guard checks and summary table printing.
     """
+
+    # ── shared plot styling ──────────────────────────────────
+    _BASE_PLOT_STYLE = {
+        'figure.figsize': (12, 6),
+        'figure.titlesize': 15,
+        'figure.titleweight': 'bold',
+
+        'axes.titlesize': 13,
+        'axes.titleweight': 'bold',
+        'axes.titlepad': 15,
+
+        'axes.labelsize': 11,
+        'axes.labelweight': 'bold',
+        'xtick.labelsize': 9,
+        'ytick.labelsize': 9,
+
+        'legend.fontsize': 9,
+        'lines.linewidth': 1.5,
+        'patch.edgecolor': 'white',
+    }
 
     def __init__(self, visualizations_directory: Optional[str] = None):
         self.visualizations_directory = visualizations_directory
         self._archive_directory: Optional[str] = None
         self._experiment_orchestrator = None
+
+        self._fig_counter: int = 0
+
+        self._apply_base_style()
 
     # ── archive directory ────────────────────────────────────
 
@@ -29,7 +52,28 @@ class BaseHandler:
     def archive_directory(self, value: str) -> None:
         self._archive_directory = value
 
-    # ── guard ────────────────────────────────────────────────
+    # ── visualization helpers ────────────────────────────────
+
+    def _apply_base_style(self) -> None:
+        """Applies the unified style configuration to Matplotlib."""
+        plt.rcParams.update(self._BASE_PLOT_STYLE)
+
+    def _save_fig(self, filename: str) -> None:
+        if not self._guard(self.visualizations_directory is not None,
+                        '_save_fig: visualizations_directory is not set — figure not saved.'):
+            plt.show()
+            return
+
+        self._fig_counter += 1
+        name, ext = os.path.splitext(filename)
+        prefixed_filename = f'{self._fig_counter:02d}_{name}{ext}'
+
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(self.visualizations_directory, prefixed_filename),
+            bbox_inches='tight', dpi=150
+        )
+        plt.show()
 
     def _guard(self, condition: bool, message: str) -> bool:
         """Print message and return False if condition is not met."""

@@ -1,6 +1,6 @@
 import json
 import ipywidgets as w
-from IPython.display import display, clear_output
+from IPython.display import display, clear_output, Javascript
 
 # ──────────────────────────────────────────────
 # HELPERS
@@ -226,7 +226,7 @@ def display_config():
     # ── Augmentation preset handler ──
     _aug_manual_keys = ['rotation','width_shift','height_shift','zoom',
                         'brightness_min','brightness_max','shear','horizontal_flip','fill_mode']
-    _preset_applying = [False]  # flag to avoid circular updates
+    _preset_applying = [False]
 
     def _on_preset_change(change):
         name = change['new']
@@ -282,7 +282,6 @@ def display_config():
     for k in _aug_manual_keys:
         W[k].observe(_on_aug_manual_change, names='value')
 
-    # Generic refresh for everything else
     for key in ['config_id','dataset','strategy','learning_rate','batch_size','epochs',
                 'dropout_conv','dropout_dense','dense_units','weight_decay',
                 'use_class_weights','class_weights_mode','use_label_smoothing',
@@ -292,8 +291,13 @@ def display_config():
         W[key].observe(refresh, names='value')
 
     # Preset JSON loader
-    preset_upload  = w.FileUpload(accept='.json', multiple=False, description='Load JSON Config')
-    preset_status  = w.Label(value='')
+    _btn_layout   = w.Layout(width='auto', height='28px')
+    preset_upload = w.FileUpload(
+        accept='.json', multiple=False,
+        description='Load Config',
+        layout=_btn_layout,
+    )
+    preset_status = w.Label(value='')
 
     def _on_preset_upload(change):
         if not change['new']:
@@ -338,9 +342,7 @@ def display_config():
             W['use_label_smoothing'].value   = ls.get('enabled', True)
             W['label_smoothing_value'].value = ls.get('value', 0.1)
 
-            # Aug
             W['use_augmentation'].value = aug.get('enabled', True)
-            # Detect preset
             aug_preset_val = 'Custom'
             for name, vals in AUGMENTATION_PRESETS.items():
                 if all(aug.get(k) == v for k, v in vals.items()):
@@ -371,9 +373,42 @@ def display_config():
             preset_status.value = 'Preset loaded!'
             refresh()
         except Exception as e:
-            preset_status.value = f'Error: {e}'
+            preset_status.value = f'Error while loading preset: {e}'
 
     preset_upload.observe(_on_preset_upload, names='value')
+
+    # Save config button
+    save_btn = w.Button(
+        description='Save Current Config',
+        button_style='',
+        layout=_btn_layout,
+        tooltip='Download current config as JSON file',
+    )
+    save_status = w.Label(value='')
+
+    def _on_save_click(_):
+        cfg = build_config(W)
+        filename = f'config_{cfg["id"]}_{cfg["dataset"]}_{cfg["model"]}_{cfg["strategy"]}.json'
+        json_str = json.dumps(cfg, indent=2)
+
+        js_code = f"""
+        (function() {{
+            var data = {json.dumps(json_str)};
+            var blob = new Blob([data], {{type: 'application/json'}});
+            var url  = URL.createObjectURL(blob);
+            var a    = document.createElement('a');
+            a.href     = url;
+            a.download = {json.dumps(filename)};
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }})();
+        """
+        display(Javascript(js_code))
+        save_status.value = f'Config saved: {filename}'
+
+    save_btn.on_click(_on_save_click)
 
     # ──────────────────────────────────────────────
     # LAYOUT
@@ -413,8 +448,12 @@ def display_config():
     header = w.HBox([
         w.HTML('<h3 style="margin:0;color:#eee">Experiment Configurator</h3>'),
     ])
-    loader_row = w.HBox([preset_upload, preset_status],
-                        layout=w.Layout(align_items='center', gap='12px', margin='6px 0'))
+
+    loader_row = w.HBox(
+        [preset_upload, preset_status, save_btn, save_status],
+        layout=w.Layout(align_items='center', gap='12px', margin='6px 0')
+    )
+
     columns    = w.HBox([col_left, col_mid, col_right],
                         layout=w.Layout(flex_flow='row wrap'))
     json_label = w.HTML('<b style="color:#aaa;font-size:12px">Current Config (live)</b>')

@@ -23,7 +23,6 @@ class DataAugmentationHandler(BaseHandler):
             visualizations_directory: Optional[str] = None
         ):
         self.dataset_handler = dataset_handler
-        self.batch_size      = batch_size
         super().__init__(visualizations_directory)
 
         self.train_datagen:  Optional[ImageDataGenerator] = None
@@ -135,7 +134,7 @@ class DataAugmentationHandler(BaseHandler):
             target_size=self._target_size(),
             color_mode=self._color_mode(),
             class_mode='categorical',
-            batch_size=self.batch_size,
+            batch_size=CONFIG['batch_size'],
         )
 
         self.train_datagen   = self._build_train_datagen()
@@ -527,7 +526,7 @@ class DataAugmentationHandler(BaseHandler):
             ('Brightness range',  str(aug['brightness_range']) if aug['enabled'] else 'n/a'),
             ('Fill mode',         aug['fill_mode'] if aug['enabled'] else 'n/a'),
             None,
-            ('Batch size',  self.batch_size),
+            ('Batch size',  CONFIG['batch_size']),
             ('Color mode',  self._color_mode()),
             ('Target size', f'{self._target_size()[0]} x {self._target_size()[1]}'),
         ]

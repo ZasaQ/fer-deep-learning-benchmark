@@ -59,6 +59,7 @@ class BaseHandler:
         plt.rcParams.update(self._BASE_PLOT_STYLE)
 
     def _save_fig(self, filename: str) -> None:
+        """Save the current plot to visualizations_directory with a sequential prefix."""
         if not self._guard(self.visualizations_directory is not None,
                         '_save_fig: visualizations_directory is not set — figure not saved.'):
             plt.show()

@@ -9,6 +9,8 @@ __all__ = [
     "BaseHandler",
     "DatasetHandler",
     "DataAugmentationHandler",
+    "ModelHandler",
+    "CallbacksHandler",
     "TrainingHandler",
     "EvaluationHandler",
     "TFLiteHandler",

@@ -10,7 +10,7 @@ from tensorflow.keras.callbacks import (
 )
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-from BaseHandler import BaseHandler
+from .BaseHandler import BaseHandler
 from DirectoryManager import DirectoryManager
 
 

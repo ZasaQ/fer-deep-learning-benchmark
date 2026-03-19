@@ -1,7 +1,7 @@
-from .data_experiment_orchestrator import DataExperimentOrchestrator
-from .training_experiment_orchestrator import TrainingExperimentOrchestrator
+from .DataExperimentOrchestrator import DataExperimentOrchestrator
+from .TrainExperimentOrchestrator import TrainExperimentOrchestrator
 
 __all__ = [
     "DataExperimentOrchestrator",
-    "TrainingExperimentOrchestrator",
+    "TrainExperimentOrchestrator",
 ]

@@ -1,9 +1,9 @@
-from .base_handler import BaseHandler
-from .dataset_handler import DatasetHandler
-from .augmentation_handler import DataAugmentationHandler
-from .training_handler import TrainingHandler
-from .evaluation_handler import EvaluationHandler
-from .tflite_handler import TFLiteHandler
+from .BaseHandler import BaseHandler
+from .DatasetHandler import DatasetHandler
+from .DataAugmentationHandler import DataAugmentationHandler
+from .TrainingHandler import TrainingHandler
+from .EvaluationHandler import EvaluationHandler
+from .TFLiteHandler import TFLiteHandler
 
 __all__ = [
     "BaseHandler",

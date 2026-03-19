@@ -1,3 +1,4 @@
+import re
 import json
 import ipywidgets as w
 from IPython.display import display, clear_output, Javascript
@@ -13,6 +14,16 @@ def parse_float(val, default):
         return float(val)
     except (ValueError, TypeError):
         return default
+
+def format_float(val):
+    """Always return scientific notation."""
+    try:
+        f = float(val)
+        s = f'{f:.0e}'
+        s = re.sub(r'e([+-])0+(\d)', r'e\1\2', s)
+        return s
+    except (ValueError, TypeError):
+        return str(val)
 
 AUGMENTATION_PRESETS = {
     'Conservative':   {'rotation_range': 10,  'width_shift_range': 0.05, 'height_shift_range': 0.05,
@@ -129,7 +140,7 @@ def _make_widgets():
     W['dataset']        = _dropdown('Dataset',  ['FER2013', 'CK+', 'RAF-DB', 'AffectNet'], 'FER2013')
     W['model']          = _dropdown('Model',    ['SimpleCNN', 'VGG16', 'ResNet50', 'MobileNetV2', 'EfficientNetB0'], 'SimpleCNN')
 
-    ALL_STRATEGIES = [('Baseline', 'baseline')]   # only for SimpleCNN
+    ALL_STRATEGIES = [('Baseline', 'baseline')]
     TL_STRATEGIES  = [('Transfer learning', 'tl'), ('Partial fine-tuning', 'pft'), ('Full fine-tuning', 'fft')]
     W['_ALL_STRATEGIES'] = ALL_STRATEGIES
     W['_TL_STRATEGIES']  = TL_STRATEGIES
@@ -330,13 +341,13 @@ def display_config():
 
             W['config_id'].value      = parsed_id
             W['dataset'].value        = _g('dataset', 'FER2013')
-            W['learning_rate'].value  = str(_g('learning_rate', '1e-3'))
+            W['learning_rate'].value  = format_float(_g('learning_rate', 1e-3))
             W['batch_size'].value     = _g('batch_size', 32)
             W['epochs'].value         = _g('epochs', 50)
             W['dropout_conv'].value   = _g('dropout_conv', 0.25) or 0.25
             W['dropout_dense'].value  = _g('dropout_dense', 0.5)
             W['dense_units'].value    = _g('dense_units', 256)
-            W['weight_decay'].value   = str(_g('weight_decay', '1e-4'))
+            W['weight_decay'].value   = format_float(_g('weight_decay', 1e-4))
             W['use_class_weights'].value     = cw.get('enabled', True)
             W['class_weights_mode'].value    = cw.get('mode', 'balanced')
             W['use_label_smoothing'].value   = ls.get('enabled', True)
@@ -364,11 +375,11 @@ def display_config():
 
             W['use_early_stopping'].value = es.get('enabled', True)
             W['es_patience'].value        = es.get('patience', 15)
-            W['es_min_delta'].value       = str(es.get('min_delta', '1e-4'))
+            W['es_min_delta'].value       = format_float(es.get('min_delta', 1e-4))
             W['use_reduce_lr'].value      = rlr.get('enabled', True)
             W['rlr_patience'].value       = rlr.get('patience', 5)
             W['rlr_factor'].value         = rlr.get('factor', 0.5)
-            W['rlr_min_lr'].value         = str(rlr.get('min_lr', '1e-7'))
+            W['rlr_min_lr'].value         = format_float(rlr.get('min_lr', 1e-7))
 
             preset_status.value = 'Preset loaded!'
             refresh()

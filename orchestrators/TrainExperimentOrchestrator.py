@@ -346,10 +346,6 @@ class TrainExperimentOrchestrator:
         """
         Archive all experiment data: config, history, predictions,
         benchmark results, metrics JSON, and LaTeX summary tables.
-
-        Note:
-            Keras and TFLite model files are NOT moved - they remain in their
-            original directories managed by CallbackHandler / TFLiteHandler.
         """
         self.timestamp_stop = datetime.datetime.now()
 

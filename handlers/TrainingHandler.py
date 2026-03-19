@@ -7,8 +7,8 @@ from sklearn.utils.class_weight import compute_class_weight
 import tensorflow as tf
 from tensorflow.keras.callbacks import Callback
 
-from .base_handler import BaseHandler
-from .data_augmentation_handler import DataAugmentationHandler
+from .BaseHandler import BaseHandler
+from .DataAugmentationHandler import DataAugmentationHandler
 
 
 class TrainingHandler(BaseHandler):

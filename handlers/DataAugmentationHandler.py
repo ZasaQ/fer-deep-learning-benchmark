@@ -9,8 +9,8 @@ from tensorflow.keras.preprocessing.image import (
     ImageDataGenerator, load_img, img_to_array
 )
 
-from .base_handler import BaseHandler
-from .dataset_handler import DatasetHandler
+from .BaseHandler import BaseHandler
+from .DatasetHandler import DatasetHandler
 
 
 class DataAugmentationHandler(BaseHandler):

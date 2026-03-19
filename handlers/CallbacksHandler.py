@@ -10,8 +10,8 @@ from tensorflow.keras.callbacks import (
 )
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-from .base_handler import BaseHandler
-from managers import DirectoryManager
+from BaseHandler import BaseHandler
+from DirectoryManager import DirectoryManager
 
 
 class LearningRateLogger(Callback):

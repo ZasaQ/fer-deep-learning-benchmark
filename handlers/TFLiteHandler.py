@@ -7,10 +7,10 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.metrics import accuracy_score
 
-from .base_handler import BaseHandler
-from .dataset_handler import DatasetHandler
-from .data_augmentation_handler import DataAugmentationHandler
-from .evaluation_handler import EvaluationHandler
+from .BaseHandler import BaseHandler
+from .DatasetHandler import DatasetHandler
+from .DataAugmentationHandler import DataAugmentationHandler
+from .EvaluationHandler import EvaluationHandler
 
 
 class TFLiteHandler(BaseHandler):

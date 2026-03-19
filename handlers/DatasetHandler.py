@@ -12,7 +12,7 @@ from PIL import Image
 from scipy.stats import gaussian_kde
 from sklearn.manifold import TSNE
 
-from .base_handler import BaseHandler
+from .BaseHandler import BaseHandler
 
 
 class DatasetHandler(BaseHandler):

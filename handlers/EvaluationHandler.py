@@ -15,9 +15,9 @@ from sklearn.preprocessing import label_binarize
 from sklearn.manifold import TSNE
 from scipy.stats import pearsonr
 
-from .base_handler import BaseHandler
-from .dataset_handler import DatasetHandler
-from .data_augmentation_handler import DataAugmentationHandler
+from .BaseHandler import BaseHandler
+from .DatasetHandler import DatasetHandler
+from .DataAugmentationHandler import DataAugmentationHandler
 
 
 class EvaluationHandler(BaseHandler):

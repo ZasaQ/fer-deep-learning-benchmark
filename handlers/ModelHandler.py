@@ -11,8 +11,8 @@ from tensorflow.keras.applications import VGG16, ResNet50, MobileNetV2, Efficien
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import regularizers
 
-from .base_handler import BaseHandler
-from .dataset_handler import DatasetHandler
+from .BaseHandler import BaseHandler
+from .DatasetHandler import DatasetHandler
 
 
 class ModelHandler(BaseHandler):
@@ -36,7 +36,7 @@ class ModelHandler(BaseHandler):
 
     TRANSFER_STRATEGIES = ('tl', 'pft', 'fft')
 
-    def __init__(self, dataset_handler):
+    def __init__(self, dataset_handler: DatasetHandler):
         self.dataset_handler = dataset_handler
         self.model: Optional[tf.keras.Model] = None
 

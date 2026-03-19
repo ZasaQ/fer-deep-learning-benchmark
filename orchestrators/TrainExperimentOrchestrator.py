@@ -12,6 +12,8 @@ import tensorflow as tf
 from sklearn.metrics import roc_curve, auc, roc_auc_score
 from sklearn.preprocessing import label_binarize
 
+from google.colab import files
+
 from handlers import (
     DatasetHandler,
     DataAugmentationHandler,
@@ -108,7 +110,7 @@ class TrainExperimentOrchestrator:
 
     # ── configuration ────────────────────────────────────────
 
-    def configure_archive(self, dir_handler) -> None:
+    def configure_archive(self, dir_handler: DirectoryManager) -> None:
         """Set archive_directory on self."""
         self.archive_directory = dir_handler.get('archive')
         print(f'Archive directory configured: {self.archive_directory}')
@@ -224,9 +226,6 @@ class TrainExperimentOrchestrator:
         macro_auc = None
         if ev.y_pred_proba is not None:
             try:
-                from sklearn.preprocessing import label_binarize
-                from sklearn.metrics import roc_curve, auc, roc_auc_score
-
                 n_classes  = ev.dataset_handler.class_num
                 y_true_bin = label_binarize(ev.y_true, classes=range(n_classes))
 
@@ -407,7 +406,6 @@ class TrainExperimentOrchestrator:
         zip_path = self.create_zip()
 
         try:
-            from google.colab import files
             print(f"Starting download: {os.path.basename(zip_path)}")
             files.download(zip_path)
         except ImportError:

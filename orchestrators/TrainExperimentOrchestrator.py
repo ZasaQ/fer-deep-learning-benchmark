@@ -361,6 +361,7 @@ class TrainExperimentOrchestrator:
         print(f"  Elapsed: {self._fmt_duration(self.elapsed_seconds)}")
         print("=" * 60)
 
+        self.save_config()
         self.save_history()
         self.save_predictions()
         self.save_benchmark_results()

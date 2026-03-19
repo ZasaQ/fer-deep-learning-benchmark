@@ -102,10 +102,6 @@ class DatasetHandler(BaseHandler):
             self.resolution_info['summary'] = f'mixed ({", ".join(parts)}{suffix})'
 
     def _discover_color_mode(self) -> None:
-        """
-        Detect dominant color mode by sampling up to 20 images per class
-        from the train folder.
-        """
         mode_counts: dict = {}
 
         for class_name in self.class_names:
@@ -120,6 +116,8 @@ class DatasetHandler(BaseHandler):
 
         grayscale = mode_counts.get('L', 0)
         color     = sum(v for k, v in mode_counts.items() if k != 'L')
+
+        self._channels = 1 if grayscale > color else 3
 
         if self._channels == 1 and self.config.get('dataset') == 'FER2013' and self.config.get('model') != 'SimpleCNN':
             self._channels = 3

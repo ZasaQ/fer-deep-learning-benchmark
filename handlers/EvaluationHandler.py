@@ -373,8 +373,22 @@ class EvaluationHandler(BaseHandler):
                              edgecolors='black', linewidths=2.5, zorder=3)
 
         for i, label in enumerate(self.dataset_handler.class_labels):
-            ax.annotate(label, (recall[i], precision[i]), xytext=(8, 8),
-                        textcoords='offset points', fontweight='bold', fontsize=9)
+            x, y = recall[i], precision[i]
+
+            x_offset = 10 if x < 0.85 else -10
+            y_offset = 10 if y < 0.85 else -10
+            ha = 'left' if x < 0.85 else 'right'
+
+            ax.annotate(
+                label,
+                xy=(x, y),
+                xytext=(x_offset, y_offset),
+                textcoords='offset points',
+                fontweight='bold',
+                fontsize=9,
+                ha=ha,
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7, edgecolor='none'),
+            )
 
         ax.set_xlabel('Recall')
         ax.set_ylabel('Precision')

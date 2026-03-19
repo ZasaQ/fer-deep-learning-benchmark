@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Tuple
 
 import numpy as np
+import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns

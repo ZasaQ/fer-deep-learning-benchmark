@@ -1,20 +1,23 @@
+import os
+import random
 from typing import Optional, List, Dict, Tuple
 
+import cv2
 import numpy as np
-import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, VPacker
+from matplotlib.patches import Patch
+from PIL import Image
 import seaborn as sns
 import tensorflow as tf
-import cv2
-from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, VPacker
+from scipy.stats import pearsonr
+from sklearn.manifold import TSNE
 from sklearn.metrics import (
     classification_report, confusion_matrix,
     roc_curve, auc, roc_auc_score
 )
 from sklearn.preprocessing import label_binarize
-from sklearn.manifold import TSNE
-from scipy.stats import pearsonr
 
 from .BaseHandler import BaseHandler
 from .DatasetHandler import DatasetHandler
@@ -337,7 +340,7 @@ class EvaluationHandler(BaseHandler):
         ax.set_ylim(0, 1.1)
         ax.grid(axis='y', alpha=0.3)
 
-        from matplotlib.patches import Patch
+        
         legend_elements = [
             Patch(facecolor='#e74c3c', alpha=0.8, label='Accuracy < 0.5'),
             Patch(facecolor='#f39c12', alpha=0.8, label='0.5 <= Accuracy < 0.7'),

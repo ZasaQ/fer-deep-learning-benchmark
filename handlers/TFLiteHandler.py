@@ -28,6 +28,7 @@ class TFLiteHandler(BaseHandler):
     }
 
     def __init__(self,
+                 config: dict,
                  model: tf.keras.Model,
                  dataset_handler: DatasetHandler,
                  data_augmentation_handler: DataAugmentationHandler,
@@ -35,6 +36,7 @@ class TFLiteHandler(BaseHandler):
                  keras_model_path: str,
                  root_directory: str,
                  visualizations_directory: str):
+        self.config                    = config
         self.model                     = model
         self.dataset_handler           = dataset_handler
         self.data_augmentation_handler = data_augmentation_handler
@@ -112,9 +114,7 @@ class TFLiteHandler(BaseHandler):
     # ── keras model registration ─────────────────────────────
 
     def register_keras_model(self, accuracy: Optional[float] = None) -> None:
-        """
-        Register Keras model accuracy and size.
-        """
+        """Register Keras model accuracy and size."""
         if accuracy is None:
             if self.evaluation_handler is None or self.evaluation_handler.test_accuracy is None:
                 raise RuntimeError(
@@ -151,15 +151,10 @@ class TFLiteHandler(BaseHandler):
             print(f'  Size (file):   {self.keras_model["file_size_kb"]:.2f} KB  <- used for comparisons')
 
     def register_from_evaluation(self) -> None:
-        """
-        Register Keras model metrics.
-        """
+        """Register Keras model metrics."""
         ev = self.evaluation_handler
         if ev is None:
-            raise RuntimeError(
-                "No EvaluationHandler available. "
-                "Pass evaluation_handler= in TFLiteHandler.__init__()."
-            )
+            raise RuntimeError("No EvaluationHandler available.")
         if ev.test_accuracy is None:
             raise RuntimeError("Call evaluation_handler.evaluate() first.")
         if ev.y_true is None or ev.per_class_acc is None:
@@ -240,22 +235,17 @@ class TFLiteHandler(BaseHandler):
     def save_tflite(self, filepath: str, model_type: str) -> None:
         tflite_model = self._model_map.get(model_type)
         if tflite_model is None:
-            raise ValueError(
-                f"Model type '{model_type}' not converted yet. "
-                f"Call convert_{model_type}() first."
-            )
+            raise ValueError(f"Model type '{model_type}' not converted yet.")
         with open(filepath, 'wb') as f:
             f.write(tflite_model)
         print(f'TFLite model saved to: {filepath}')
 
     def save_all(self) -> dict:
-        try:
-            model_name = f"{CONFIG['dataset']}_{CONFIG['model']}_{CONFIG['strategy']}"
-        except KeyError as e:
-            raise KeyError(
-                f"CONFIG is missing required key {e}. "
-                f"Expected keys: 'dataset', 'model', 'strategy'."
-            ) from e
+        model_name = (
+            f"{self.config['dataset']}_"
+            f"{self.config['model']}_"
+            f"{self.config['strategy']}"
+        )
 
         filepaths = {}
         for model_type, suffix in [
@@ -273,12 +263,7 @@ class TFLiteHandler(BaseHandler):
 
     def benchmark_keras_inference(self, shuffle: bool) -> dict:
         if self.keras_model is None:
-            raise RuntimeError(
-                "No Keras model registered. "
-                "Call register_from_evaluation() or register_keras_model() first."
-            )
-        
-        self.data_augmentation_handler.reset_test_generator()
+            raise RuntimeError("Call register_from_evaluation() first.")
 
         total       = self._total_test_samples()
         test_gen    = self._prepare_test_generator(shuffle=shuffle)
@@ -301,7 +286,7 @@ class TFLiteHandler(BaseHandler):
                 print(f'  {processed}/{total} samples...', end='\r')
 
         if not times:
-            raise RuntimeError("No samples were processed during Keras inference benchmarking.")
+            raise RuntimeError("No samples were processed.")
 
         self.keras_model.update({
             'mean_inference_time_ms': float(np.mean(times)),
@@ -316,10 +301,7 @@ class TFLiteHandler(BaseHandler):
         print(f'  P95 inference:   {self.keras_model["p95_inference_time_ms"]:.2f} ms')
         return self.keras_model
 
-    def benchmark_inference(self,
-                            model_type: str,
-                            shuffle: bool,
-                            save_raw: bool) -> dict:
+    def benchmark_inference(self, model_type: str, shuffle: bool, save_raw: bool) -> dict:
         tflite_model = self._model_map.get(model_type)
         if tflite_model is None:
             raise ValueError(f"Model type '{model_type}' not converted yet.")
@@ -853,8 +835,8 @@ class TFLiteHandler(BaseHandler):
 
     def generate_summary(self, mode: str) -> None:
         summary_data = [
-            ('Model',    CONFIG.get('model', 'Unknown')),
-            ('Strategy', CONFIG.get('strategy', 'Unknown')),
+            ('Model',    self.config.get('model', 'Unknown')),
+            ('Strategy', self.config.get('strategy', 'Unknown')),
         ]
 
         if self.keras_model:
@@ -906,13 +888,13 @@ class TFLiteHandler(BaseHandler):
 
             summary_data += [
                 None,
-                (f'{label} accuracy',        model_accuracy),
-                (f'{label} size (KB)',       size_str),
-                (f'{label} compression',     compression),
-                (f'{label} mean inference',  mean_str),
-                (f'{label} P95 inference',   p95_str),
-                (f'{label} samples tested',  f"{results['samples_tested']:,}"),
-                (f'{label} conversion time', f"{self.conversion_times.get(model_type, 0):.1f}s"),
+                (f'{label} accuracy',         model_accuracy),
+                (f'{label} size (KB)',        size_str),
+                (f'{label} compression',      compression),
+                (f'{label} mean inference',   mean_str),
+                (f'{label} P95 inference',    p95_str),
+                (f'{label} samples tested',   f"{results['samples_tested']:,}"),
+                (f'{label} conversion time',  f"{self.conversion_times.get(model_type, 0):.1f}s"),
             ]
 
         if mode == 'latex':

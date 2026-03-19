@@ -3,6 +3,7 @@ import datetime
 from typing import Optional, List, Dict
 
 import numpy as np
+import tensorflow as tf
 from sklearn.metrics import classification_report
 from tensorflow.keras.callbacks import (
     Callback, ModelCheckpoint, EarlyStopping,
@@ -60,7 +61,8 @@ class PerClassF1Callback(Callback):
 class CallbacksHandler(BaseHandler):
     """Builds and manages Keras callbacks for FER training experiments."""
 
-    def __init__(self, model_name: str, directory_manager: DirectoryManager):
+    def __init__(self, config: dict, model_name: str, directory_manager: DirectoryManager):
+        self.config                   = config
         self.model_name               = model_name
         self.root_directory           = directory_manager.get('root')
         self.archive_directory        = directory_manager.get('archive')
@@ -81,7 +83,6 @@ class CallbacksHandler(BaseHandler):
         return self.per_class_f1_callback
 
     def _build_checkpoint(self) -> ModelCheckpoint:
-        """Save best model weights based on val_loss."""
         return ModelCheckpoint(
             filepath=self.model_path,
             save_best_only=True,
@@ -92,7 +93,7 @@ class CallbacksHandler(BaseHandler):
 
     def _build_early_stopping(self) -> Optional[EarlyStopping]:
         """Return EarlyStopping callback or None if disabled in CONFIG."""
-        cfg = CONFIG['callbacks']['early_stopping']
+        cfg = self.config['callbacks']['early_stopping']
         if not cfg['enabled']:
             return None
         return EarlyStopping(
@@ -105,7 +106,7 @@ class CallbacksHandler(BaseHandler):
 
     def _build_reduce_lr(self) -> Optional[ReduceLROnPlateau]:
         """Return ReduceLROnPlateau callback or None if disabled in CONFIG."""
-        cfg = CONFIG['callbacks']['reduce_lr']
+        cfg = self.config['callbacks']['reduce_lr']
         if not cfg['enabled']:
             return None
         return ReduceLROnPlateau(
@@ -142,7 +143,6 @@ class CallbacksHandler(BaseHandler):
         """Build all callbacks from global CONFIG."""
         self.callbacks = []
 
-        # Always included
         self.callbacks.append(self._build_checkpoint())
         self.callbacks.append(self._build_tensorboard())
         self.callbacks.append(self._build_csv_logger())
@@ -151,7 +151,6 @@ class CallbacksHandler(BaseHandler):
         if val_generator is not None and class_labels is not None:
             self.callbacks.append(self._build_per_class_f1(val_generator, class_labels))
 
-        # Optional — included based on CONFIG
         for builder in (self._build_early_stopping, self._build_reduce_lr):
             cb = builder()
             if cb is not None:
@@ -163,8 +162,8 @@ class CallbacksHandler(BaseHandler):
     # ── summary ──────────────────────────────────────────────
 
     def generate_summary(self, mode: str) -> None:
-        es  = CONFIG['callbacks']['early_stopping']
-        rlr = CONFIG['callbacks']['reduce_lr']
+        es  = self.config['callbacks']['early_stopping']
+        rlr = self.config['callbacks']['reduce_lr']
 
         checkpoint_path = os.path.join(self.root_directory, f'{self.model_name}.keras')
         csv_path        = os.path.join(self.archive_directory, 'training.csv')

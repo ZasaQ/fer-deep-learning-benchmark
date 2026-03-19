@@ -24,14 +24,16 @@ class EvaluationHandler(BaseHandler):
     """Handles model evaluation, metrics computation and performance visualization."""
 
     def __init__(self,
+                 config: dict,
                  model: tf.keras.Model,
                  data_augmentation_handler: DataAugmentationHandler,
                  dataset_handler: DatasetHandler,
                  epoch_class_f1: Optional[List[Dict[str, float]]],
                  visualizations_directory: str):
-        self.model = model
+        self.config                    = config
+        self.model                     = model
         self.data_augmentation_handler = data_augmentation_handler
-        self.dataset_handler = dataset_handler
+        self.dataset_handler           = dataset_handler
         super().__init__(visualizations_directory)
 
         self.report: Optional[dict] = None
@@ -1216,8 +1218,8 @@ class EvaluationHandler(BaseHandler):
         worst_class   = self.dataset_handler.class_labels[int(np.argmin(per_class_acc))]
 
         summary_data = [
-            ('Model',                    CONFIG['model']),
-            ('Strategy',                 CONFIG['strategy']),
+            ('Model',                    self.config['model']),
+            ('Strategy',                 self.config['strategy']),
             None,
             ('Test loss',                f"{self.test_loss:.4f}" if self.test_loss is not None else 'n/a'),
             ('Test accuracy',            f"{self.test_accuracy:.4f}" if self.test_accuracy is not None else 'n/a'),

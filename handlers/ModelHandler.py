@@ -18,7 +18,6 @@ from .DatasetHandler import DatasetHandler
 class ModelHandler(BaseHandler):
     """
     Builds Keras models for all five FER architectures.
-    Reads all parameters from global CONFIG.
 
     Models:     SimpleCNN, VGG16, ResNet50, MobileNetV2, EfficientNetB0
     Strategies: baseline (SimpleCNN only), tl, pft, fft
@@ -36,7 +35,8 @@ class ModelHandler(BaseHandler):
 
     TRANSFER_STRATEGIES = ('tl', 'pft', 'fft')
 
-    def __init__(self, dataset_handler: DatasetHandler):
+    def __init__(self, config: dict, dataset_handler: DatasetHandler):
+        self.config          = config
         self.dataset_handler = dataset_handler
         self.model: Optional[tf.keras.Model] = None
 
@@ -55,11 +55,10 @@ class ModelHandler(BaseHandler):
 
     def _reg(self):
         """Return L2 regularizer from CONFIG, or None if weight_decay is 0."""
-        wd = CONFIG['weight_decay']
+        wd = self.config['weight_decay']
         return regularizers.l2(wd) if wd > 0 else None
 
     def _head(self, x, dense_units: int, dropout_dense: float):
-        """Shared classification head: GAP -> Dense -> Dropout -> Softmax."""
         x = GlobalAveragePooling2D()(x)
         x = Dense(dense_units, activation='relu', kernel_regularizer=self._reg())(x)
         x = Dropout(dropout_dense)(x)
@@ -78,9 +77,9 @@ class ModelHandler(BaseHandler):
         """
         Freeze or unfreeze backbone layers according to the transfer learning strategy.
 
-        tl  – freeze entire backbone
-        pft – freeze early layers, unfreeze later layers (architecture-specific cut-point)
-        fft – unfreeze entire backbone
+        tl  - freeze entire backbone
+        pft - freeze early layers, unfreeze later layers (architecture-specific cut-point)
+        fft - unfreeze entire backbone
         """
         if strategy not in self.TRANSFER_STRATEGIES:
             raise ValueError(
@@ -117,7 +116,7 @@ class ModelHandler(BaseHandler):
 
     def _loss(self):
         """Return loss function with optional label smoothing from CONFIG."""
-        ls = CONFIG['label_smoothing']
+        ls = self.config['label_smoothing']
         smoothing = ls.get('value', 0.0) if ls.get('enabled', False) else 0.0
         return tf.keras.losses.CategoricalCrossentropy(label_smoothing=smoothing)
 
@@ -125,10 +124,10 @@ class ModelHandler(BaseHandler):
 
     def _build_simple_cnn(self) -> tf.keras.Model:
         """Build the custom SimpleCNN baseline architecture."""
-        dropout_conv  = CONFIG['dropout_conv']
-        dropout_dense = CONFIG['dropout_dense']
-        dense_units   = CONFIG['dense_units']
-        lr            = CONFIG['learning_rate']
+        dropout_conv  = self.config['dropout_conv']
+        dropout_dense = self.config['dropout_dense']
+        dense_units   = self.config['dense_units']
+        lr            = self.config['learning_rate']
         reg           = self._reg()
 
         model = tf.keras.Sequential([
@@ -169,13 +168,11 @@ class ModelHandler(BaseHandler):
         return model
 
     def _build_transfer_model(self, base_model_cls, model_name: str) -> tf.keras.Model:
-        """
-        Unified builder for all transfer learning architectures.
-        """
-        strategy      = CONFIG['strategy']
-        dropout_dense = CONFIG['dropout_dense']
-        dense_units   = CONFIG['dense_units']
-        lr            = CONFIG['learning_rate']
+        """Unified builder for all transfer learning architectures."""
+        strategy      = self.config['strategy']
+        dropout_dense = self.config['dropout_dense']
+        dense_units   = self.config['dense_units']
+        lr            = self.config['learning_rate']
 
         base_model = base_model_cls(
             weights='imagenet',
@@ -194,7 +191,7 @@ class ModelHandler(BaseHandler):
 
         model.compile(
             optimizer=Adam(learning_rate=lr),
-            loss=self._loss(),          # <- zamiast 'categorical_crossentropy'
+            loss=self._loss(),
             metrics=['accuracy'],
         )
         return model
@@ -216,8 +213,8 @@ class ModelHandler(BaseHandler):
 
     def build(self) -> tf.keras.Model:
         """Build and return a compiled model based on current global CONFIG."""
-        model_name = CONFIG['model']
-        strategy   = CONFIG['strategy']
+        model_name = self.config['model']
+        strategy   = self.config['strategy']
 
         if model_name not in self.BUILDERS:
             raise ValueError(
@@ -291,8 +288,8 @@ class ModelHandler(BaseHandler):
             return
 
         params     = self.count_params()
-        model_name = CONFIG['model']
-        strategy   = CONFIG['strategy']
+        model_name = self.config['model']
+        strategy   = self.config['strategy']
 
         print("=" * 45)
         print("MODEL PARAMETER SUMMARY")
@@ -301,7 +298,7 @@ class ModelHandler(BaseHandler):
         print(f"Strategy:        {strategy}")
         print(f"Input shape:     {self._input_shape}")
         print(f"Output classes:  {self._class_num}")
-        print(f"Learning rate:   {CONFIG['learning_rate']:.2e}")
+        print(f"Learning rate:   {self.config['learning_rate']:.2e}")
         print("-" * 45)
         print(f"Trainable:       {params['trainable']:>12,}  ({params['trainable_mb']} MB)")
         print(f"Non-trainable:   {params['non_trainable']:>12,}  ({params['non_trainable_mb']} MB)")
@@ -338,18 +335,18 @@ class ModelHandler(BaseHandler):
         layers = self.count_layers()
 
         summary_data = [
-            ('Model',                CONFIG['model']),
-            ('Strategy',             CONFIG['strategy']),
+            ('Model',                self.config['model']),
+            ('Strategy',             self.config['strategy']),
             None,
             ('Input shape',          str(self._input_shape)),
             ('Output classes',       self._class_num),
             None,
-            ('Learning rate',        f"{CONFIG['learning_rate']:.2e}"),
-            ('Dropout conv',         CONFIG['dropout_conv'] if CONFIG['model'] == 'SimpleCNN' else 'n/a'),
-            ('Dropout dense',        CONFIG['dropout_dense']),
-            ('Dense units',          CONFIG['dense_units']),
-            ('Weight decay',         CONFIG['weight_decay']),
-            ('Label smoothing',      f"{CONFIG['label_smoothing']['value']:.2f}" if CONFIG['label_smoothing']['enabled'] else 'off'),
+            ('Learning rate',        f"{self.config['learning_rate']:.2e}"),
+            ('Dropout conv',         self.config['dropout_conv'] if self.config['model'] == 'SimpleCNN' else 'n/a'),
+            ('Dropout dense',        self.config['dropout_dense']),
+            ('Dense units',          self.config['dense_units']),
+            ('Weight decay',         self.config['weight_decay']),
+            ('Label smoothing',      f"{self.config['label_smoothing']['value']:.2f}" if self.config['label_smoothing']['enabled'] else 'off'),
             None,
             ('Trainable layers',     f"{layers['trainable']}/{layers['total']}"     if layers else 'n/a'),
             ('Frozen layers',        f"{layers['non_trainable']}/{layers['total']}" if layers else 'n/a'),

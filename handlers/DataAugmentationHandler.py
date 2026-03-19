@@ -18,10 +18,11 @@ class DataAugmentationHandler(BaseHandler):
 
     def __init__(
             self,
+            config: dict,
             dataset_handler: DatasetHandler,
-            batch_size: int,
             visualizations_directory: Optional[str] = None
         ):
+        self.config          = config
         self.dataset_handler = dataset_handler
         super().__init__(visualizations_directory)
 
@@ -39,14 +40,14 @@ class DataAugmentationHandler(BaseHandler):
     @property
     def _aug_label(self) -> str:
         """Return augmentation preset name or 'No augmentation' if disabled."""
-        aug = CONFIG['augmentation']
+        aug = self.config['augmentation']
         if not aug['enabled']:
             return 'No augmentation'
         return aug.get('preset', 'Custom')
 
     def _build_train_datagen(self) -> ImageDataGenerator:
         """Build train ImageDataGenerator from current CONFIG augmentation settings."""
-        aug = CONFIG['augmentation']
+        aug = self.config['augmentation']
 
         if not aug['enabled']:
             return ImageDataGenerator(rescale=1./255)
@@ -127,14 +128,13 @@ class DataAugmentationHandler(BaseHandler):
 
     def create_generators(self) -> None:
         """
-        Create train, val and test generators from global CONFIG.
-        Train generator uses augmentation; val and test use rescale only.
+        Create train, val and test generators.
         """
         common = dict(
             target_size=self._target_size(),
             color_mode=self._color_mode(),
             class_mode='categorical',
-            batch_size=CONFIG['batch_size'],
+            batch_size=self.config['batch_size'],
         )
 
         self.train_datagen   = self._build_train_datagen()
@@ -176,7 +176,7 @@ class DataAugmentationHandler(BaseHandler):
     def visualize_augmentation_with_maps(self, num_examples: int,
                                          figsize: Tuple[int, int] = (15, 8)) -> None:
         """Show augmented versions of one image alongside pixel difference maps."""
-        if not CONFIG['augmentation']['enabled']:
+        if not self.config['augmentation']['enabled']:
             print("     Augmentation is disabled.")
             return
 
@@ -203,14 +203,14 @@ class DataAugmentationHandler(BaseHandler):
             axes[1, i + 1].axis('off')
             plt.colorbar(im, ax=axes[1, i + 1], fraction=0.046, pad=0.04)
 
-        plt.suptitle(f'Augmentation with Difference Maps | {self._aug_label} | {CONFIG["dataset"]}')
+        plt.suptitle(f'Augmentation with Difference Maps | {self._aug_label} | {self.config["dataset"]}')
         self._save_fig('augmentation_with_maps.png')
 
     def visualize_augmentation_grid(self, num_images: int,
                                     augmentations_per_image: int,
                                     figsize: Tuple[int, int] = (15, 8)) -> None:
         """Grid of multiple source images with their augmented versions."""
-        if not CONFIG['augmentation']['enabled']:
+        if not self.config['augmentation']['enabled']:
             print("     Augmentation is disabled.")
             return
 
@@ -233,7 +233,7 @@ class DataAugmentationHandler(BaseHandler):
                 self._show_image(axes[row, i + 1], batch[0],
                                  f'Aug {i + 1}' if row == 0 else '')
 
-        plt.suptitle(f'Augmentation Grid | {self._aug_label} | {CONFIG["dataset"]}')
+        plt.suptitle(f'Augmentation Grid | {self._aug_label} | {self.config["dataset"]}')
         self._save_fig('augmentation_grid.png')
 
     def visualize_batch_examples(self, split: str, num_batches: int,
@@ -266,7 +266,7 @@ class DataAugmentationHandler(BaseHandler):
                 axes[i].axis('off')
 
             plt.suptitle(
-                f'{split.capitalize()} Batch {batch_num + 1} | {self._aug_label} | {CONFIG["dataset"]}'
+                f'{split.capitalize()} Batch {batch_num + 1} | {self._aug_label} | {self.config["dataset"]}'
             )
             self._save_fig(f'batch_examples_{split}_{batch_num + 1}.png')
 
@@ -364,7 +364,7 @@ class DataAugmentationHandler(BaseHandler):
     def visualize_augmentation_diversity(self, grid_size: int,
                                          figsize: Tuple[int, int] = (13, 13)) -> None:
         """Grid of grid_size x grid_size augmented versions of one image."""
-        if not CONFIG['augmentation']['enabled']:
+        if not self.config['augmentation']['enabled']:
             print("     Augmentation is disabled.")
             return
 
@@ -383,7 +383,7 @@ class DataAugmentationHandler(BaseHandler):
 
         plt.suptitle(
             f'Augmentation Diversity ({n} samples) | '
-            f'{class_name.capitalize()} | {self._aug_label} | {CONFIG["dataset"]}'
+            f'{class_name.capitalize()} | {self._aug_label} | {self.config["dataset"]}'
         )
         self._save_fig('augmentation_diversity.png')
 
@@ -424,15 +424,13 @@ class DataAugmentationHandler(BaseHandler):
             axes[i, 0].set_ylabel(name, fontsize=10, fontweight='bold',
                                    rotation=0, labelpad=70, va='center')
 
-        plt.suptitle(f'Augmentation Strategy Comparison | {class_name.capitalize()} | {CONFIG["dataset"]}')
+        plt.suptitle(f'Augmentation Strategy Comparison | {class_name.capitalize()} | {self.config["dataset"]}')
         self._save_fig('augmentation_strategy_comparison.png')
 
     def plot_pixel_intensity_comparison(self, num_samples: int,
                                         figsize: Tuple[int, int] = (14, 5)) -> None:
-        """
-        Histogram with KDE and CDF comparing pixel intensities before and after augmentation.
-        """
-        if not CONFIG['augmentation']['enabled']:
+        """Histogram with KDE and CDF comparing pixel intensities before and after augmentation."""
+        if not self.config['augmentation']['enabled']:
             print("     Augmentation is disabled.")
             return
 
@@ -471,7 +469,6 @@ class DataAugmentationHandler(BaseHandler):
         ax1.hist(orig_all, bins=bins, alpha=0.45, color='steelblue', density=True, label='Original')
         ax1.hist(aug_all,  bins=bins, alpha=0.45, color='orange',    density=True, label='Augmented')
 
-        from scipy.stats import gaussian_kde
         for data, color in [(orig_all, 'steelblue'), (aug_all, 'orange')]:
             kde = gaussian_kde(data, bw_method=0.05)
             xs  = np.linspace(0, 1, 300)
@@ -503,7 +500,7 @@ class DataAugmentationHandler(BaseHandler):
         ax2.grid(axis='both', alpha=0.3)
 
         plt.suptitle(
-            f'Pixel Intensity Comparison | {self._aug_label} | {CONFIG["dataset"]}\n'
+            f'Pixel Intensity Comparison | {self._aug_label} | {self.config["dataset"]}\n'
             f'Sampling {num_samples} images'
         )
         self._save_fig('pixel_intensity_distribution.png')
@@ -511,7 +508,7 @@ class DataAugmentationHandler(BaseHandler):
     # ── summary ─────────────────────────────────────────────
 
     def generate_summary(self, mode: str) -> None:
-        aug = CONFIG['augmentation']
+        aug = self.config['augmentation']
 
         summary_data = [
             ('Augmentation enabled', str(aug['enabled'])),
@@ -526,7 +523,7 @@ class DataAugmentationHandler(BaseHandler):
             ('Brightness range',  str(aug['brightness_range']) if aug['enabled'] else 'n/a'),
             ('Fill mode',         aug['fill_mode'] if aug['enabled'] else 'n/a'),
             None,
-            ('Batch size',  CONFIG['batch_size']),
+            ('Batch size',  self.config['batch_size']),
             ('Color mode',  self._color_mode()),
             ('Target size', f'{self._target_size()[0]} x {self._target_size()[1]}'),
         ]

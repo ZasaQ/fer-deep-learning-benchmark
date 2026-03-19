@@ -15,19 +15,21 @@ class TrainingHandler(BaseHandler):
     """Handles model training execution and learning curve visualization."""
 
     def __init__(self,
+                 config: dict,
                  model: tf.keras.Model,
                  callbacks: List[Callback],
                  data_augmentation_handler: DataAugmentationHandler,
                  visualizations_directory: str):
-        self.model = model
-        self.callbacks = callbacks
+        self.config                    = config
+        self.model                     = model
+        self.callbacks                 = callbacks
         self.data_augmentation_handler = data_augmentation_handler
         super().__init__(visualizations_directory)
 
-        self.history:    None
+        self.history:     None
         self.fit_start:   Optional[datetime.datetime] = None
         self.fit_stop:    Optional[datetime.datetime] = None
-        self.fit_elapsed: Optional[float]             = None   # seconds
+        self.fit_elapsed: Optional[float]             = None
         self.device_info: dict                        = self._collect_device_info()
 
         self.best_val_accuracy: Optional[float] = None
@@ -46,7 +48,6 @@ class TrainingHandler(BaseHandler):
     def _collect_device_info() -> dict:
         """
         Collect GPU info via TensorFlow + nvidia-smi.
-        Falls back gracefully to CPU if no GPU is available or any query fails.
         """
         info = {
             'device':    'CPU',
@@ -67,7 +68,6 @@ class TrainingHandler(BaseHandler):
             for gpu in gpus:
                 gpu_entry = {'name': gpu.name}
 
-                # Compute capability — TF 2.5+
                 try:
                     details = tf.config.experimental.get_device_details(gpu)
                     gpu_entry['device_name']        = details.get('device_name', 'unknown')
@@ -76,7 +76,6 @@ class TrainingHandler(BaseHandler):
                     gpu_entry['device_name']        = 'unknown'
                     gpu_entry['compute_capability'] = 'unknown'
 
-                # Memory via nvidia-smi (most reliable in Colab)
                 try:
                     import subprocess
                     result = subprocess.run(
@@ -99,7 +98,6 @@ class TrainingHandler(BaseHandler):
 
                 info['gpus'].append(gpu_entry)
 
-            # Print summary on init
             for g in info['gpus']:
                 name      = g.get('smi_name', g.get('device_name', 'GPU'))
                 mem_total = g.get('memory_total_mb')
@@ -114,12 +112,7 @@ class TrainingHandler(BaseHandler):
         return info
 
     def _build_class_weights(self) -> Optional[dict]:
-        """
-        Compute class weight dictionary from CONFIG.
-        Returns None if class weights are disabled.
-        Only 'balanced' mode is currently supported.
-        """
-        class_weights = CONFIG['class_weights']
+        class_weights = self.config['class_weights']
         if not class_weights.get('enabled', False):
             return None
 
@@ -171,7 +164,7 @@ class TrainingHandler(BaseHandler):
         self.history = self.model.fit(
             self.data_augmentation_handler.train_generator,
             validation_data=self.data_augmentation_handler.val_generator,
-            epochs=CONFIG['epochs'],
+            epochs=self.config['epochs'],
             callbacks=self.callbacks,
             class_weight=self._build_class_weights(),
             verbose=1
@@ -231,7 +224,7 @@ class TrainingHandler(BaseHandler):
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 
-        # Accuracy
+        # Accuracy PLot
         final_train_acc = h['accuracy'][-1]
         final_val_acc   = h['val_accuracy'][-1]
 
@@ -258,7 +251,7 @@ class TrainingHandler(BaseHandler):
         ax1.legend()
         ax1.grid(axis='both', alpha=0.3)
 
-        # Loss
+        # Loss Plot
         final_train_loss = h['loss'][-1]
         final_val_loss   = h['val_loss'][-1]
 
@@ -406,7 +399,6 @@ class TrainingHandler(BaseHandler):
     def generate_summary(self, mode: str) -> None:
         h = self.history.history if self.history is not None else {}
 
-        # device rows
         d = self.device_info
         if d.get('gpu_count', 0) == 0:
             device_rows = [('Device', 'CPU')]
@@ -424,11 +416,11 @@ class TrainingHandler(BaseHandler):
 
         if h:
             summary_data = [
-                ('Model',    CONFIG['model']),
-                ('Strategy', CONFIG['strategy']),
+                ('Model',    self.config['model']),
+                ('Strategy', self.config['strategy']),
                 None,
-                ('Class weights',   CONFIG['class_weights']['mode'] if CONFIG['class_weights']['enabled'] else 'off'),
-                ('Label smoothing', f"{CONFIG['label_smoothing']['value']:.2f}" if CONFIG['label_smoothing']['enabled'] else 'off'),
+                ('Class weights',   self.config['class_weights']['mode'] if self.config['class_weights']['enabled'] else 'off'),
+                ('Label smoothing', f"{self.config['label_smoothing']['value']:.2f}" if self.config['label_smoothing']['enabled'] else 'off'),
                 None,
                 *device_rows,
                 None,
@@ -436,9 +428,9 @@ class TrainingHandler(BaseHandler):
                 ('Fit stop',    self.fit_stop.strftime('%Y-%m-%d %H:%M:%S')  if self.fit_stop    else 'n/a'),
                 ('Fit elapsed', self._fmt_duration(self.fit_elapsed)         if self.fit_elapsed is not None else 'n/a'),
                 None,
-                ('Epochs configured',        CONFIG['epochs']),
+                ('Epochs configured',        self.config['epochs']),
                 ('Epochs run',               self.epochs_run if self.epochs_run is not None else 'n/a'),
-                ('Early stopping triggered', str(self.epochs_run < CONFIG['epochs']) if self.epochs_run is not None else 'n/a'),
+                ('Early stopping triggered', str(self.epochs_run < self.config['epochs']) if self.epochs_run is not None else 'n/a'),
                 None,
                 ('Best epoch (min val_loss)', self.best_epoch),
                 ('Best val accuracy',         f"{self.best_val_accuracy:.4f}" if self.best_val_accuracy is not None else 'n/a'),
@@ -453,7 +445,7 @@ class TrainingHandler(BaseHandler):
             ]
         else:
             summary_data = [
-                ('Model',  CONFIG['model']),
+                ('Model',  self.config['model']),
                 ('Status', 'not trained yet'),
                 None,
                 *device_rows,

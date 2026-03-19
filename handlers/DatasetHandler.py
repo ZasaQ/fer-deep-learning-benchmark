@@ -26,8 +26,9 @@ class DatasetHandler(BaseHandler):
         'AffectNet' : 'https://drive.google.com/file/d/1rD3ZkaLdjrwBHsq3gLUXUTKRRoSRGx43/view?usp=sharing'
     }
 
-    def __init__(self, visualizations_directory: Optional[str] = None):
+    def __init__(self, config: dict, visualizations_directory: Optional[str] = None):
         super().__init__(visualizations_directory)
+        self.config = config
 
         self.dataset_name = ''
 
@@ -36,7 +37,7 @@ class DatasetHandler(BaseHandler):
         self.test_folder  = 'dataset/test'
 
         self.resolution_info: dict = {}
-        self._channels: int = 3  # overwritten by _discover_color_mode()
+        self._channels: int = 3
 
         self.class_names: List[str] = []
         self.class_labels: List[str] = []
@@ -81,7 +82,7 @@ class DatasetHandler(BaseHandler):
         dominant = max(size_counts, key=size_counts.get)
         dominant_pct = size_counts[dominant] / total * 100
 
-        self.cols, self.rows = dominant  # PIL returns (width, height)
+        self.cols, self.rows = dominant
 
         self.resolution_info = {
             'dominant':     f'{dominant[0]} x {dominant[1]}',
@@ -103,7 +104,7 @@ class DatasetHandler(BaseHandler):
     def _discover_color_mode(self) -> None:
         """
         Detect dominant color mode by sampling up to 20 images per class
-        from the train folder. Sets self._channels (1 = grayscale, 3 = RGB).
+        from the train folder.
         """
         mode_counts: dict = {}
 
@@ -120,8 +121,7 @@ class DatasetHandler(BaseHandler):
         grayscale = mode_counts.get('L', 0)
         color     = sum(v for k, v in mode_counts.items() if k != 'L')
 
-        # FER2013 is natively grayscale, but pretrained models require 3-channel input
-        if self._channels == 1 and CONFIG.get('dataset') == 'FER2013' and CONFIG.get('model') != 'SimpleCNN':
+        if self._channels == 1 and self.config.get('dataset') == 'FER2013' and self.config.get('model') != 'SimpleCNN':
             self._channels = 3
 
     def _discover_dominant_format(self) -> str:
@@ -162,12 +162,10 @@ class DatasetHandler(BaseHandler):
 
     @property
     def channels(self) -> int:
-        """1 = grayscale, 3 = RGB — detected automatically from dataset images."""
         return self._channels
 
     @property
     def input_shape(self) -> Tuple[int, int, int]:
-        """Model input shape as (rows, cols, channels)."""
         return (self.rows, self.cols, self._channels)
 
     # ── public ──────────────────────────────────────────────
@@ -178,7 +176,7 @@ class DatasetHandler(BaseHandler):
             print("Data folder already exists.")
             return
 
-        self.dataset_name = CONFIG['dataset']
+        self.dataset_name = self.config['dataset']
         if self.dataset_name not in self.DATASET_LINKS:
             raise ValueError(
                 f"Invalid dataset '{self.dataset_name}'. "
@@ -252,7 +250,6 @@ class DatasetHandler(BaseHandler):
         return True
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return dataset metadata as a plain dictionary."""
         return {
             'train_folder': self.train_folder,
             'val_folder':   self.val_folder,
@@ -303,7 +300,7 @@ class DatasetHandler(BaseHandler):
                         ha='center', va='bottom', fontsize=9)
 
         title_split = split.capitalize() if split else "All Splits"
-        plt.suptitle(f"Class Distribution | {title_split} | {CONFIG['dataset']}")
+        plt.suptitle(f"Class Distribution | {title_split} | {self.config['dataset']}")
         plt.tight_layout()
 
         filename = f'class_distribution_{split}.png' if split else 'class_distribution.png'
@@ -337,7 +334,7 @@ class DatasetHandler(BaseHandler):
         ax.set_ylabel('Number of Images')
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
-        plt.suptitle(f"Combined Class Distribution | {CONFIG['dataset']}\nTotal Images Amount: {grand_total}")
+        plt.suptitle(f"Combined Class Distribution | {self.config['dataset']}\nTotal Images Amount: {grand_total}")
         self._save_fig('split_distribution_comparison.png')
 
     def plot_class_distribution_pie(self, split: str, figsize: Tuple[int, int] = (10, 8)) -> None:
@@ -356,7 +353,7 @@ class DatasetHandler(BaseHandler):
             startangle=90,
             explode=explode,
         )
-        plt.suptitle(f'{split.capitalize()} Set Distribution | {CONFIG["dataset"]}')
+        plt.suptitle(f'{split.capitalize()} Set Distribution | {self.config["dataset"]}')
         ax.legend(
             [f'{l}: {c} ({c/total*100:.1f}%)' for l, c in zip(self.class_labels, distribution.values())],
             loc='center left', bbox_to_anchor=(1, 0.5)
@@ -392,7 +389,7 @@ class DatasetHandler(BaseHandler):
                     ax.set_ylabel(self.class_labels[i], rotation=0, labelpad=40,
                                   fontsize=12, fontweight='bold')
 
-        plt.suptitle(f'Sample Images | {split.capitalize()} | {CONFIG["dataset"]}', y=1.01)
+        plt.suptitle(f'Sample Images | {split.capitalize()} | {self.config["dataset"]}', y=1.01)
         self._save_fig('image_samples.png')
 
     def plot_split_ratio(self, figsize: Tuple[int, int] = (13, 5)) -> None:
@@ -436,7 +433,7 @@ class DatasetHandler(BaseHandler):
         )
         ax2.set_title('Overall Split')
 
-        plt.suptitle(f"Split Ratio | {CONFIG['dataset']}")
+        plt.suptitle(f"Split Ratio | {self.config['dataset']}")
         self._save_fig('split_ratio.png')
 
     def plot_class_imbalance_analysis(self, figsize: Tuple[int, int] = (10, 6)) -> None:
@@ -476,7 +473,7 @@ class DatasetHandler(BaseHandler):
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
 
-        plt.suptitle(f"Imbalance Analysis | {CONFIG['dataset']}")
+        plt.suptitle(f"Imbalance Analysis | {self.config['dataset']}")
         self._save_fig('class_imbalance_analysis.png')
 
     def plot_pixel_intensity_distribution(self, split: str, num_samples: int,
@@ -521,7 +518,6 @@ class DatasetHandler(BaseHandler):
                           edgecolor='gray', alpha=0.9))
 
         ax = axes[1]
-        from scipy.stats import gaussian_kde
         x_grid = np.linspace(0, 255, 512)
         for class_name, color in zip(self.class_names, colors):
             px  = np.array(class_pixels[class_name], dtype=np.float32)
@@ -540,7 +536,7 @@ class DatasetHandler(BaseHandler):
         ax.tick_params(labelsize=8)
 
         plt.suptitle(
-            f'Pixel Intensity Distribution | {split.capitalize()} | {CONFIG['dataset']}\n'
+            f'Pixel Intensity Distribution | {split.capitalize()} | {self.config["dataset"]}\n'
             f'Sampling {num_samples} images'
         )
         self._save_fig('pixel_intensity_distribution.png')
@@ -577,7 +573,7 @@ class DatasetHandler(BaseHandler):
             linecolor='white',
         )
         plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-        ax.set_title(f"Class Balance Heatmap | {CONFIG['dataset']}")
+        ax.set_title(f"Class Balance Heatmap | {self.config['dataset']}")
         self._save_fig('class_heatmap.png')
 
     def plot_tsne_embeddings(self,
@@ -643,7 +639,7 @@ class DatasetHandler(BaseHandler):
         ax.set_ylabel('t-SNE Dimension 2')
         ax.set_title(
             f't-SNE Embedding of Raw Pixels | '
-            f'{split.capitalize()} | {CONFIG["dataset"]}\n'
+            f'{split.capitalize()} | {self.config["dataset"]}\n'
             f'({X.shape[0]} samples, {X.shape[1]}D → 2D, perplexity={perplexity})'
         )
         ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5),
@@ -688,8 +684,7 @@ class DatasetHandler(BaseHandler):
         overall_mean = np.mean(all_vals)
         upper_limit  = np.percentile(all_vals, 95) * 1.2
         ax1.set_ylim(0, upper_limit)
-        mean_line = ax1.axhline(overall_mean, color='black', linestyle='--', alpha=0.5,
-                                label=f'Overall mean')
+        mean_line = ax1.axhline(overall_mean, color='black', linestyle='--', alpha=0.5)
         ax1.annotate(
             f'Overall mean: {overall_mean:.1f}',
             xy=(self.class_num - 1, overall_mean),
@@ -735,7 +730,7 @@ class DatasetHandler(BaseHandler):
         ax2.set_title('Sharpness Distribution by Class')
         ax2.grid(axis='y', alpha=0.3)
 
-        plt.suptitle(f"Image Quality Analysis | {split.capitalize()} | {CONFIG['dataset']}\nSampling {num_samples} images")
+        plt.suptitle(f"Image Quality Analysis | {split.capitalize()} | {self.config['dataset']}\nSampling {num_samples} images")
         self._save_fig('image_quality_analysis.png')
 
     def plot_face_brightness_analysis(self, split: str, num_samples: int,
@@ -793,8 +788,8 @@ class DatasetHandler(BaseHandler):
         ax2.grid(axis='y', alpha=0.3)
 
         plt.suptitle(
-            f'Face Brightness Analysis | {split.capitalize()} | {CONFIG['dataset']}'
-            f'fSampling {num_samples} images'
+            f'Face Brightness Analysis | {split.capitalize()} | {self.config["dataset"]}\n'
+            f'Sampling {num_samples} images'
         )
         self._save_fig('face_brightness_analysis.png')
 
@@ -808,7 +803,7 @@ class DatasetHandler(BaseHandler):
         arrs   = {s: np.array(list(dists[s].values())) for s in self.SPLITS}
 
         summary_data = [
-            ('Dataset',                  CONFIG['dataset']),
+            ('Dataset',                  self.config['dataset']),
             None,
             ('Classes',                  self.class_num),
             ('Class labels',             ', '.join(self.class_labels)),

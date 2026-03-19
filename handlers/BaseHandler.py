@@ -1,5 +1,6 @@
 import os
-from typing import Optional, List
+import matplotlib.pyplot as plt
+from typing import Optional
 
 
 class BaseHandler:

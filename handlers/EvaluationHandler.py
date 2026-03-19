@@ -246,7 +246,7 @@ class EvaluationHandler(BaseHandler):
                 va='bottom', ha='right', fontweight='bold')
 
         ax.set_ylabel('Score')
-        ax.set_title(f'Precision, Recall & F1-Score | {CONFIG["dataset"]} | {CONFIG["model"]}')
+        ax.set_title(f'Precision, Recall & F1-Score | {self.config["dataset"]} | {self.config["model"]}')
         ax.set_xticks(x)
         ax.set_xticklabels(self.dataset_handler.class_labels, rotation=45, ha='right')
         ax.set_ylim(0, 1.15)

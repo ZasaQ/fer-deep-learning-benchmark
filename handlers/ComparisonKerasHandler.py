@@ -3,22 +3,12 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns
 
-from .BaseComparisonHandler import (
-    BaseComparisonHandler,
-    MODEL_ORDER,
-    MODEL_COLORS,
-    DATASET_ORDER,
-    STRATEGY_ORDER,
-    STRATEGY_LS,
-    EMOTION_CLASSES,
-)
+from .BaseComparisonHandler import BaseComparisonHandler
 
 
 class ComparisonKerasHandler(BaseComparisonHandler):
-    """
-    Handler for visualizing and comparing Keras training results across all experiments.
-    """
- 
+    """Handler for visualizing and comparing Keras training results across all experiments."""
+
     def __init__(
         self,
         train_experiments_dir: str,
@@ -29,9 +19,9 @@ class ComparisonKerasHandler(BaseComparisonHandler):
             visualizations_directory=visualizations_directory,
         )
         print('ComparisonKerasHandler initialized.')
- 
+
     # ── public ────────────────────────────────────────────────────────────
- 
+
     def run_all(self) -> None:
         self._check_loaded()
         print('Generating Keras comparison visualizations ...\n')
@@ -40,35 +30,35 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         self.plot_learning_curves_overlay()
         self.plot_per_class_f1_comparison()
         print('\nDone.')
- 
+
     def plot_accuracy_heatmap(self, figsize=(14, 8)) -> None:
         self._check_loaded()
         self._build_metric_heatmap(
             'test_accuracy',
-            'Test Accuracy  —  Model x Strategy x Dataset',
+            'Test Accuracy  —  Model × Strategy × Dataset',
             'accuracy_heatmap.png',
             figsize,
         )
- 
+
     def plot_f1_heatmap(self, figsize=(14, 8)) -> None:
         self._check_loaded()
         self._build_metric_heatmap(
             'test_f1_macro',
-            'Macro F1 Score  —  Model x Strategy x Dataset',
+            'Macro F1 Score  —  Model × Strategy × Dataset',
             'f1_heatmap.png',
             figsize,
         )
- 
+
     def plot_learning_curves_overlay(self, figsize=(16, 10)) -> None:
         self._check_loaded()
         self._build_learning_curves_overlay(figsize)
- 
+
     def plot_per_class_f1_comparison(self, figsize=(15, 9)) -> None:
         self._check_loaded()
         self._build_per_class_f1_comparison(figsize)
- 
+
     # ── plot builders ─────────────────────────────────────────────────────────
- 
+
     def _build_metric_heatmap(
         self, metric: str, title: str, filename: str, figsize=(14, 8)
     ) -> None:
@@ -80,11 +70,11 @@ class ComparisonKerasHandler(BaseComparisonHandler):
             index=['model', 'strategy'], columns='dataset',
             values=metric, aggfunc='mean',
         )
-        idx_order = [(m, s) for m in MODEL_ORDER for s in STRATEGY_ORDER
+        idx_order = [(m, s) for m in self.MODEL_ORDER for s in self.STRATEGY_ORDER
                      if (m, s) in pivot.index]
-        col_order = [d for d in DATASET_ORDER if d in pivot.columns]
+        col_order = [d for d in self.DATASET_ORDER if d in pivot.columns]
         pivot = pivot.reindex(idx_order)[col_order]
- 
+
         fig, ax = plt.subplots(figsize=figsize)
         fig.suptitle(title, fontsize=13, fontweight='bold')
         mask = pivot.isna()
@@ -97,7 +87,7 @@ class ComparisonKerasHandler(BaseComparisonHandler):
                         annot=False, cmap=['#eeeeee'], vmin=0, vmax=1,
                         linewidths=0.5, linecolor='#dddddd', cbar=False)
         cumsum = 0
-        for m in MODEL_ORDER:
+        for m in self.MODEL_ORDER:
             cnt = sum(1 for (mm, _) in idx_order if mm == m)
             cumsum += cnt
             if cumsum < len(idx_order):
@@ -107,9 +97,10 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         ax.tick_params(axis='x', rotation=0)
         ax.tick_params(axis='y', rotation=0)
         self._save_fig(filename)
- 
+
     def _build_learning_curves_overlay(self, figsize=(16, 10)) -> None:
-        datasets = [d for d in DATASET_ORDER if any(r.dataset == d for r in self.records)]
+        datasets = [d for d in self.DATASET_ORDER
+                    if any(r.dataset == d for r in self.records)]
         n_cols = 2
         n_rows = int(np.ceil(len(datasets) / n_cols))
         fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
@@ -124,8 +115,8 @@ class ComparisonKerasHandler(BaseComparisonHandler):
                 if not curve:
                     continue
                 ax.plot(range(1, len(curve) + 1), curve,
-                        color=MODEL_COLORS.get(rec.model, '#888'),
-                        linestyle=STRATEGY_LS.get(rec.strategy, '-'),
+                        color=self.MODEL_COLORS.get(rec.model, '#888'),
+                        linestyle=self.STRATEGY_LS.get(rec.strategy, '-'),
                         linewidth=1.4, alpha=0.82)
             ax.set_title(dataset, fontsize=11)
             ax.set_xlabel('Epoch')
@@ -134,18 +125,19 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         for idx in range(len(datasets), n_rows * n_cols):
             axes[idx // n_cols][idx % n_cols].set_visible(False)
         handles = []
-        for model, color in MODEL_COLORS.items():
+        for model, color in self.MODEL_COLORS.items():
             handles.append(plt.Line2D([0], [0], color=color, linewidth=2, label=model))
-        for strat, ls in STRATEGY_LS.items():
+        for strat, ls in self.STRATEGY_LS.items():
             handles.append(plt.Line2D([0], [0], color='black', linestyle=ls,
                                       linewidth=1.5, label=strat))
         fig.legend(handles=handles, loc='lower center',
-                   ncol=len(MODEL_COLORS) + len(STRATEGY_LS),
+                   ncol=len(self.MODEL_COLORS) + len(self.STRATEGY_LS),
                    bbox_to_anchor=(0.5, -0.04), frameon=False, fontsize=9)
         self._save_fig('learning_curves_overlay.png')
- 
+
     def _build_per_class_f1_comparison(self, figsize=(15, 9)) -> None:
-        datasets = [d for d in DATASET_ORDER if any(r.dataset == d for r in self.records)]
+        datasets = [d for d in self.DATASET_ORDER
+                    if any(r.dataset == d for r in self.records)]
         n_cols = 2
         n_rows = int(np.ceil(len(datasets) / n_cols))
         fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
@@ -154,7 +146,7 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         for idx, dataset in enumerate(datasets):
             ax     = axes[idx // n_cols][idx % n_cols]
             subset = self.df[self.df['dataset'] == dataset]
-            emotions_avail = [e for e in EMOTION_CLASSES
+            emotions_avail = [e for e in self.EMOTION_CLASSES
                               if f'f1_{e.lower()}' in subset.columns
                               and subset[f'f1_{e.lower()}'].notna().any()]
             if not emotions_avail:
@@ -162,15 +154,15 @@ class ComparisonKerasHandler(BaseComparisonHandler):
                         ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(dataset, fontsize=11)
                 continue
-            models_avail = [m for m in MODEL_ORDER if m in subset['model'].values]
+            models_avail = [m for m in self.MODEL_ORDER if m in subset['model'].values]
             x     = np.arange(len(emotions_avail))
             width = 0.8 / max(len(models_avail), 1)
             for i, model in enumerate(models_avail):
-                mrows = subset[subset['model'] == model]
-                means = [mrows[f'f1_{e.lower()}'].mean() for e in emotions_avail]
+                mrows  = subset[subset['model'] == model]
+                means  = [mrows[f'f1_{e.lower()}'].mean() for e in emotions_avail]
                 offset = (i - len(models_avail) / 2 + 0.5) * width
                 ax.bar(x + offset, means, width,
-                       label=model, color=MODEL_COLORS.get(model, '#888'),
+                       label=model, color=self.MODEL_COLORS.get(model, '#888'),
                        edgecolor='white', linewidth=0.5, alpha=0.9)
             ax.set_title(dataset, fontsize=11)
             ax.set_xticks(x)
@@ -181,8 +173,8 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         for idx in range(len(datasets), n_rows * n_cols):
             axes[idx // n_cols][idx % n_cols].set_visible(False)
         handles = [plt.Rectangle((0, 0), 1, 1,
-                                  color=MODEL_COLORS.get(m, '#888'), label=m)
-                   for m in MODEL_ORDER]
-        fig.legend(handles=handles, loc='lower center', ncol=len(MODEL_ORDER),
+                                  color=self.MODEL_COLORS.get(m, '#888'), label=m)
+                   for m in self.MODEL_ORDER]
+        fig.legend(handles=handles, loc='lower center', ncol=len(self.MODEL_ORDER),
                    bbox_to_anchor=(0.5, -0.03), frameon=False, fontsize=9)
         self._save_fig('per_class_f1_comparison.png')

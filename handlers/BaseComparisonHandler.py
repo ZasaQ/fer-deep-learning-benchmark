@@ -132,6 +132,14 @@ class BaseComparisonHandler(BaseHandler):
     # ── folder parsing ────────────────────────────────────────────────────────
 
     def _load_folder(self, folder: Path) -> Optional[ExperimentRecord]:
+        """Loads a single experiment folder, handling possible nesting and missing files."""
+        nested = folder / folder.name
+        if nested.is_dir():
+            folder = nested
+
+        archive = folder / 'archive'
+        source  = archive if archive.is_dir() else folder
+
         stem      = folder.name
         m         = self._FOLDER_RE.match(stem)
         from_name = {}
@@ -144,13 +152,13 @@ class BaseComparisonHandler(BaseHandler):
                                 m.group('strategy').lower(), m.group('strategy')),
             }
 
-        config  = self._read_json(folder / 'config.json')
-        metrics = self._read_json(folder / 'metrics.json')
-        history = self._read_pickle(folder / 'history.pkl')
+        config  = self._read_json(source / 'config.json')
+        metrics = self._read_json(source / 'metrics.json')
+        history = self._read_pickle(source / 'history.pkl')
 
         experiment_id = (metrics.get('experiment_id')
-                         or config.get('experiment_id')
-                         or from_name.get('id', stem))
+                        or config.get('experiment_id')
+                        or from_name.get('id', stem))
         model    = (metrics.get('model')    or config.get('model_name')    or from_name.get('model',    'Unknown'))
         dataset  = (metrics.get('dataset')  or config.get('dataset_name')  or from_name.get('dataset',  'Unknown'))
         strategy = (metrics.get('strategy') or config.get('strategy')      or from_name.get('strategy', 'Unknown'))

@@ -13,14 +13,11 @@ class ComparisonOrchestrator:
     def __init__(
         self,
         train_experiments_dir: str,
-        archive_dir: str,
-        keras_visualizations_dir: str,
-        tflite_visualizations_dir: str,
+        comparison_experiment_dir: str,
     ):
         self.train_experiments_dir     = train_experiments_dir
-        self._archive_dir              = archive_dir
-        self._keras_visualizations_dir  = keras_visualizations_dir
-        self._tflite_visualizations_dir = tflite_visualizations_dir
+        self.comparison_experiment_dir = comparison_experiment_dir
+        self._archive_dir              = os.path.join(comparison_experiment_dir, 'archive')
 
         self._zips_dir     = os.path.join(train_experiments_dir, 'zips')
         self._unpacked_dir = os.path.join(train_experiments_dir, 'unpacked')
@@ -50,9 +47,7 @@ class ComparisonOrchestrator:
             quiet=False,
             use_cookies=False,
         )
-        zips = sorted([
-            f for f in os.listdir(self._zips_dir) if f.endswith('.zip')
-        ])
+        zips = sorted([f for f in os.listdir(self._zips_dir) if f.endswith('.zip')])
         print(f'  Download complete — {len(zips)} ZIPs in {self._zips_dir}')
         return zips
 
@@ -60,9 +55,7 @@ class ComparisonOrchestrator:
 
     def unzip_experiments(self) -> list:
         """Unpacks ZIPs from zips/ into unpacked/, one folder per experiment. Skips existing."""
-        zips = sorted([
-            f for f in os.listdir(self._zips_dir) if f.endswith('.zip')
-        ])
+        zips = sorted([f for f in os.listdir(self._zips_dir) if f.endswith('.zip')])
         if not zips:
             raise FileNotFoundError(
                 f'No ZIPs found in {self._zips_dir}. '
@@ -88,24 +81,24 @@ class ComparisonOrchestrator:
     # ── archive ───────────────────────────────────────────────────────────────
 
     def archive_results(self, archive_name: Optional[str] = None) -> str:
-        """Zips all plots from both visualization dirs into archive_dir."""
+        """Zips the entire comparison experiment folder into archive/."""
         timestamp    = _dt.now().strftime('%Y%m%d-%H%M%S')
-        archive_name = archive_name or f'comparison_plots_{timestamp}'
+        archive_name = archive_name or f'comparison_results_{timestamp}'
         archive_path = os.path.join(self._archive_dir, f'{archive_name}.zip')
 
         collected = 0
         with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
-            for plot_dir in (self._keras_visualizations_dir, self._tflite_visualizations_dir):
-                for png in sorted(os.listdir(plot_dir)):
-                    if not png.endswith('.png'):
+            for dirpath, _, filenames in os.walk(self.comparison_experiment_dir):
+                for filename in filenames:
+                    if filename.endswith('.zip'):
                         continue
-                    full_path = os.path.join(plot_dir, png)
-                    arcname   = os.path.join(os.path.basename(plot_dir), png)
-                    zout.write(full_path, arcname)
+                    filepath = os.path.join(dirpath, filename)
+                    arcname  = os.path.relpath(filepath, os.path.dirname(self.comparison_experiment_dir))
+                    zout.write(filepath, arcname)
                     collected += 1
 
-        size_kb = os.path.getsize(archive_path) / 1024
-        print(f'  Archived {collected} plots -> {archive_path} ({size_kb:.1f} KB)')
+        size_mb = os.path.getsize(archive_path) / (1024 * 1024)
+        print(f'  Archived {collected} files -> {archive_path} ({size_mb:.2f} MB)')
         return archive_path
 
     # ── download to local ─────────────────────────────────────────────────────
@@ -127,9 +120,6 @@ class ComparisonOrchestrator:
         if not os.path.exists(archive_path):
             raise FileNotFoundError(f'Archive not found: {archive_path}')
 
-        size_kb = os.path.getsize(archive_path) / 1024
-        print(f'Downloading {os.path.basename(archive_path)} ({size_kb:.1f} KB) ...')
+        size_mb = os.path.getsize(archive_path) / (1024 * 1024)
+        print(f'Downloading {os.path.basename(archive_path)} ({size_mb:.2f} MB) ...')
         files.download(archive_path)
-
-
-print('ComparisonOrchestrator defined.')

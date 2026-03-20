@@ -24,14 +24,12 @@ class DirectoryManager:
     def __init__(
         self,
         experiment_name: str,
-        visualization_subdirs: Optional[list[str]] = None
+        visualization_subdirs: Optional[list[str]] = None,
+        other_subdirs: Optional[list[str]] = None
     ):
         self.experiment_name = experiment_name
-        self.visualization_subdirs = (
-            visualization_subdirs
-            if visualization_subdirs is not None
-            else self.DEFAULT_VISUALIZATION_SUBDIRS
-        )
+        self.visualization_subdirs = visualization_subdirs if visualization_subdirs is not None else self.DEFAULT_VISUALIZATION_SUBDIRS
+        self.other_subdirs = other_subdirs if other_subdirs is not None else self.OTHER_SUBDIRS
 
         self.root: Optional[str] = None
         self.paths: dict = {}

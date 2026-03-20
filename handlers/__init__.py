@@ -6,6 +6,9 @@ from .CallbacksHandler import CallbacksHandler
 from .TrainingHandler import TrainingHandler
 from .EvaluationHandler import EvaluationHandler
 from .TFLiteHandler import TFLiteHandler
+from .BaseComparisonHandler import BaseComparisonHandler
+from .ComparisonKerasHandler import ComparisonKerasHandler
+from .ComparisonTFLiteHandler import ComparisonTFLiteHandler
 
 __all__ = [
     "BaseHandler",
@@ -16,4 +19,7 @@ __all__ = [
     "TrainingHandler",
     "EvaluationHandler",
     "TFLiteHandler",
+    "BaseComparisonHandler",
+    "ComparisonKerasHandler",
+    "ComparisonTFLiteHandler",
 ]

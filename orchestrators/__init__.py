@@ -1,6 +1,6 @@
 from .DataExperimentOrchestrator import DataExperimentOrchestrator
 from .TrainExperimentOrchestrator import TrainExperimentOrchestrator
-from .ComparisonOrchestrator import ComparisonOrchestrator, ComparisonHandler
+from .ComparisonOrchestrator import ComparisonOrchestrator
 
 __all__ = [
     "DataExperimentOrchestrator",

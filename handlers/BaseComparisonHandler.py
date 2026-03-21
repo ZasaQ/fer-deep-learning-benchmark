@@ -10,6 +10,21 @@ import pandas as pd
 from .BaseHandler import BaseHandler
 
 
+_CLASS_ALIASES = {
+    'happy':     'Happiness',
+    'happiness': 'Happiness',
+    'sad':       'Sadness',
+    'sadness':   'Sadness',
+    'angry':     'Anger',
+    'anger':     'Anger',
+    'disgust':   'Disgust',
+    'fear':      'Fear',
+    'neutral':   'Neutral',
+    'surprise':  'Surprise',
+}
+
+
+
 @dataclass
 class ExperimentRecord:
     experiment_id: str
@@ -22,11 +37,11 @@ class ExperimentRecord:
 
     @property
     def test_accuracy(self) -> Optional[float]:
-        return self.metrics.get('test_accuracy')
+        return self.metrics.get('test_accuracy') or self.metrics.get('accuracy')
 
     @property
     def test_f1_macro(self) -> Optional[float]:
-        return self.metrics.get('test_f1_macro')
+        return self.metrics.get('test_f1_macro') or self.metrics.get('f1_macro')
 
     @property
     def per_class_f1(self) -> dict:
@@ -52,7 +67,7 @@ class BaseComparisonHandler(BaseHandler):
         'Baseline', 'TL', 'PFT', 'FFT',
     ]
     EMOTION_CLASSES = [
-        'Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral',
+        'Anger', 'Disgust', 'Fear', 'Happiness', 'Neutral', 'Sadness', 'Surprise',
     ]
     TFLITE_VARIANTS = [
         'float32', 'dynamic_quant', 'int8_quant',
@@ -82,8 +97,6 @@ class BaseComparisonHandler(BaseHandler):
         'baseline': 'Baseline', 'tl': 'TL', 'pft': 'PFT', 'fft': 'FFT',
     }
 
-    # ── init ──────────────────────────────────────────────────────────────────
-
     def __init__(
         self,
         train_experiments_dir: str,
@@ -95,8 +108,6 @@ class BaseComparisonHandler(BaseHandler):
         self.df: Optional[pd.DataFrame]      = None
 
         self._load()
-
-    # ── loading ───────────────────────────────────────────────────────────────
 
     def _load(self) -> None:
         folders = sorted([
@@ -132,11 +143,12 @@ class BaseComparisonHandler(BaseHandler):
     # ── folder parsing ────────────────────────────────────────────────────────
 
     def _load_folder(self, folder: Path) -> Optional[ExperimentRecord]:
-        """Loads a single experiment folder, handling possible nesting and missing files."""
+        # unwrap nested folder with same name (ZIP extractall artifact)
         nested = folder / folder.name
         if nested.is_dir():
             folder = nested
 
+        # config files sit in archive/
         archive = folder / 'archive'
         source  = archive if archive.is_dir() else folder
 
@@ -157,15 +169,28 @@ class BaseComparisonHandler(BaseHandler):
         history = self._read_pickle(source / 'history.pkl')
 
         experiment_id = (metrics.get('experiment_id')
-                        or config.get('experiment_id')
-                        or from_name.get('id', stem))
+                         or config.get('experiment_id')
+                         or from_name.get('id', stem))
         model    = (metrics.get('model')    or config.get('model_name')    or from_name.get('model',    'Unknown'))
         dataset  = (metrics.get('dataset')  or config.get('dataset_name')  or from_name.get('dataset',  'Unknown'))
         strategy = (metrics.get('strategy') or config.get('strategy')      or from_name.get('strategy', 'Unknown'))
 
         strategy = self._STRATEGY_MAP.get(strategy.lower(), strategy)
+
+        # normalize dataset names
         if 'RAF' in dataset.upper():
             dataset = 'RAF-DB'
+        elif 'AFFECT' in dataset.upper():
+            dataset = 'AffectNet'
+
+        # normalize per_class_f1 keys across datasets
+        # (AffectNet uses 'Happy'/'Sad', others use 'Happiness'/'Sadness')
+        raw_f1     = metrics.get('per_class_f1', {})
+        normalized = {
+            _CLASS_ALIASES.get(k.lower(), k): v
+            for k, v in raw_f1.items()
+        }
+        metrics['per_class_f1'] = normalized
 
         return ExperimentRecord(
             experiment_id=str(experiment_id),
@@ -244,6 +269,3 @@ class BaseComparisonHandler(BaseHandler):
                                          'comparison_summary.tex')
         else:
             self._generate_ascii_summary(self.__class__.__name__, sections)
-
-
-print('ExperimentRecord and BaseComparisonHandler defined.')

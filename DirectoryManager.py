@@ -3,42 +3,23 @@ from typing import Optional
 
 
 class DirectoryManager:
-    """
-    Manages experiment directory structure.
-    """
+    """Manages experiment directory structure."""
 
-    DEFAULT_VISUALIZATION_SUBDIRS = [
-        'dataset_visualizations',
-        'data_augmentation_visualizations',
-        'model_visualizations',
-        'training_visualizations',
-        'evaluation_visualizations',
-        'tflite_visualizations',
-    ]
-
-    OTHER_SUBDIRS = [
-        'logs',
-        'archive',
-    ]
-
-    def __init__(
-        self,
-        experiment_name: str,
-        visualization_subdirs: Optional[list[str]] = None,
-        other_subdirs: Optional[list[str]] = None
-    ):
+    def __init__(self, experiment_name: str):
         self.experiment_name = experiment_name
-        self.visualization_subdirs = visualization_subdirs if visualization_subdirs is not None else self.DEFAULT_VISUALIZATION_SUBDIRS
-        self.other_subdirs = other_subdirs if other_subdirs is not None else self.OTHER_SUBDIRS
-
         self.root: Optional[str] = None
-        self.paths: dict = {}
+        self.paths: dict         = {}
 
         print('DirectoryManager has been initialized.')
 
-    # ── public ──────────────────────────────────────────────
+    # ── public ────────────────────────────────────────────────────────────────
 
-    def create(self) -> str:
+    def create_experiment_dirs(
+        self,
+        visualization_subdirs: list[str],
+        other_subdirs: list[str],
+    ) -> str:
+        """Create the full experiment directory structure."""
         self.root = self.experiment_name
         os.makedirs(self.root, exist_ok=True)
         self.paths = {'root': self.root}
@@ -47,22 +28,39 @@ class DirectoryManager:
         os.makedirs(visualizations_root, exist_ok=True)
         self.paths['visualizations'] = visualizations_root
 
-        for subdir in self.visualization_subdirs:
+        for subdir in visualization_subdirs:
             path = os.path.join(visualizations_root, subdir)
             os.makedirs(path, exist_ok=True)
             self.paths[subdir] = path
 
-        for subdir in self.OTHER_SUBDIRS:
+        for subdir in other_subdirs:
             path = os.path.join(self.root, subdir)
             os.makedirs(path, exist_ok=True)
             self.paths[subdir] = path
 
-        self._print_structure()
+        self._print_structure(visualization_subdirs, other_subdirs)
         return self.root
+
+    def create_dir(self, path: str, key: Optional[str] = None) -> str:
+        """
+        Create an arbitrary directory and register it in paths.
+
+        Parameters
+        ----------
+        path : str
+            Directory path to create (absolute or relative).
+        key : str, optional
+            Key to register in paths. Defaults to the last component of path.
+        """
+        os.makedirs(path, exist_ok=True)
+        registered_key = key or os.path.basename(path)
+        self.paths[registered_key] = path
+        print(f'  {registered_key} -> {path}')
+        return path
 
     def get(self, subdir: str) -> str:
         if not self.paths:
-            raise RuntimeError("Directories not created yet. Call create() first.")
+            raise RuntimeError('Directories not created yet. Call create_experiment_dirs() first.')
         if subdir not in self.paths:
             raise KeyError(
                 f"Unknown subdir: '{subdir}'. "
@@ -74,30 +72,30 @@ class DirectoryManager:
         """List files in a specific subdirectory with sizes."""
         path = self.get(subdir)
         if not os.path.exists(path):
-            print(f"Directory not found: {path}")
+            print(f'Directory not found: {path}')
             return
 
-        files = sorted(os.listdir(path))
-        if not files:
-            print(f"  {subdir}/ is empty")
+        entries = sorted(os.listdir(path))
+        if not entries:
+            print(f'  {subdir}/ is empty')
             return
 
-        print(f"\n  {subdir}/")
-        for f in files:
+        print(f'\n  {subdir}/')
+        for f in entries:
             fp = os.path.join(path, f)
             if os.path.isfile(fp):
                 size_kb = os.path.getsize(fp) / 1024
-                print(f"    {f:<40} {size_kb:>8.1f} KB")
+                print(f'    {f:<40} {size_kb:>8.1f} KB')
             else:
-                print(f"    {f}/")
+                print(f'    {f}/')
 
     def list_all_contents(self) -> None:
         """List files across all subdirectories."""
         if not self.paths:
-            print("Directories not created yet.")
+            print('Directories not created yet.')
             return
-        print(f"\nExperiment: {self.root}")
-        print("=" * 55)
+        print(f'\nExperiment: {self.root}')
+        print('=' * 55)
         for subdir in self.paths:
             self.list_contents(subdir)
 
@@ -109,13 +107,19 @@ class DirectoryManager:
                 total += os.path.getsize(os.path.join(dirpath, f))
         return total / (1024 * 1024)
 
-    def _print_structure(self) -> None:
-        print(f"\n{self.root}/")
-        print(f"   ├── visualizations/")
-        for i, subdir in enumerate(self.visualization_subdirs):
-            connector = "└" if i == len(self.visualization_subdirs) - 1 else "├"
-            print(f"   │   {connector}── {subdir}/")
-        for i, subdir in enumerate(self.OTHER_SUBDIRS):
-            connector = "└" if i == len(self.OTHER_SUBDIRS) - 1 else "├"
-            print(f"   {connector}── {subdir}/")
+    # ── private ───────────────────────────────────────────────────────────────
+
+    def _print_structure(
+        self,
+        visualization_subdirs: list[str],
+        other_subdirs: list[str],
+    ) -> None:
+        print(f'\n{self.root}/')
+        print(f'   ├── visualizations/')
+        for i, subdir in enumerate(visualization_subdirs):
+            connector = '└' if i == len(visualization_subdirs) - 1 else '├'
+            print(f'   │   {connector}── {subdir}/')
+        for i, subdir in enumerate(other_subdirs):
+            connector = '└' if i == len(other_subdirs) - 1 else '├'
+            print(f'   {connector}── {subdir}/')
         print()

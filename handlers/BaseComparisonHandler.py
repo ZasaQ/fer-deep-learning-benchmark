@@ -209,6 +209,9 @@ class BaseComparisonHandler(BaseHandler):
                 'strategy':      r.strategy,
                 'test_accuracy': r.test_accuracy,
                 'test_f1_macro': r.test_f1_macro,
+                'precision_macro': r.metrics.get('precision_macro'),
+                'recall_macro':    r.metrics.get('recall_macro'),
+                'macro_auc':       r.metrics.get('macro_auc'),
             }
             for emo in self.EMOTION_CLASSES:
                 row[f'f1_{emo.lower()}'] = r.per_class_f1.get(emo)

@@ -14,8 +14,8 @@ class ComparisonOrchestrator:
         self.timestamp       = _dt.now().strftime('%Y%m%d-%H%M%S')
         self.experiment_name = f'comparison_experiment_{self.timestamp}'
 
-        self.zips_dir     = None
-        self.unpacked_dir = None
+        self.trained_zips_dir     = None
+        self.trained_unpacked_dir = None
 
         self._comparison_experiment_dir = None
         self._archive_dir               = None
@@ -55,8 +55,8 @@ class ComparisonOrchestrator:
     def is_complete(self) -> bool:
         """Check if all required directories and handlers are configured."""
         checks = {
-            'zips_dir':                  self.zips_dir is not None,
-            'unpacked_dir':              self.unpacked_dir is not None,
+            'zips_dir':                  self.trained_zips_dir is not None,
+            'unpacked_dir':              self.trained_unpacked_dir is not None,
             'comparison_experiment_dir': self._archive_dir is not None,
             'keras_handler':             self._keras_handler is not None,
             'tflite_handler':            self._tflite_handler is not None,
@@ -72,35 +72,35 @@ class ComparisonOrchestrator:
 
     def download_experiments(self, source: str) -> list:
         """Downloads experiment ZIPs from a Google Drive folder share link."""
-        self._check('download_experiments', self.zips_dir, 'zips_dir')
-        print(f'Downloading experiments from Google Drive -> {self.zips_dir}')
+        self._check('download_experiments', self.trained_zips_dir, 'zips_dir')
+        print(f'Downloading experiments from Google Drive -> {self.trained_zips_dir}')
         gdown.download_folder(
             url=source,
-            output=self.zips_dir,
+            output=self.trained_zips_dir,
             quiet=False,
             use_cookies=False,
         )
-        zips = sorted([f for f in os.listdir(self.zips_dir) if f.endswith('.zip')])
-        print(f'  Download complete — {len(zips)} ZIPs in {self.zips_dir}')
+        zips = sorted([f for f in os.listdir(self.trained_zips_dir) if f.endswith('.zip')])
+        print(f'  Download complete — {len(zips)} ZIPs in {self.trained_zips_dir}')
         return zips
 
     # ── unzip ─────────────────────────────────────────────────────────────────
 
     def unzip_experiments(self) -> list:
         """Unpacks ZIPs from zips/ into unpacked/, one folder per experiment. Skips existing."""
-        self._check('unzip_experiments', self.zips_dir,     'zips_dir')
-        self._check('unzip_experiments', self.unpacked_dir, 'unpacked_dir')
-        zips = sorted([f for f in os.listdir(self.zips_dir) if f.endswith('.zip')])
+        self._check('unzip_experiments', self.trained_zips_dir,     'zips_dir')
+        self._check('unzip_experiments', self.trained_unpacked_dir, 'unpacked_dir')
+        zips = sorted([f for f in os.listdir(self.trained_zips_dir) if f.endswith('.zip')])
         if not zips:
             raise FileNotFoundError(
-                f'No ZIPs found in {self.zips_dir}. '
+                f'No ZIPs found in {self.trained_zips_dir}. '
                 'Call download_experiments() first.'
             )
         print(f'Unpacking {len(zips)} experiment ZIPs ...')
         unpacked = []
         for zip_name in zips:
-            zip_path = os.path.join(self.zips_dir, zip_name)
-            dest     = os.path.join(self.unpacked_dir, os.path.splitext(zip_name)[0])
+            zip_path = os.path.join(self.trained_zips_dir, zip_name)
+            dest     = os.path.join(self.trained_unpacked_dir, os.path.splitext(zip_name)[0])
             if os.path.exists(dest):
                 print(f'  [skip] {zip_name} (already unpacked)')
                 unpacked.append(dest)
@@ -110,7 +110,7 @@ class ComparisonOrchestrator:
                 zf.extractall(dest)
             print(f'  {zip_name} -> {os.path.basename(dest)}/')
             unpacked.append(dest)
-        print(f'  {len(unpacked)} experiments ready in {self.unpacked_dir}')
+        print(f'  {len(unpacked)} experiments ready in {self.trained_unpacked_dir}')
         return unpacked
 
     # ── archive ───────────────────────────────────────────────────────────────

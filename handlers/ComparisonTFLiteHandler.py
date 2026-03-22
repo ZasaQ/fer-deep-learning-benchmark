@@ -19,36 +19,16 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
         visualizations_directory: str,
     ):
         super().__init__(
-            train_experiments_dir,
+            train_experiments_dir=train_experiments_dir,
             visualizations_directory=visualizations_directory,
         )
         print('ComparisonTFLiteHandler initialized.')
 
-    # ── public ────────────────────────────────────────────────────────────
-
-    def run_all(self) -> None:
-        self._check_loaded()
-        print('Generating TFLite comparison visualizations ...\n')
-        self.plot_size_vs_accuracy()
-        self.plot_quantization_accuracy_delta()
-        self.plot_tflite_aggregated_scatter()
-        print('\nDone.')
+    # ── visualizations ────────────────────────────────────────────────────────────
 
     def plot_size_vs_accuracy(self, figsize=(13, 7)) -> None:
         self._check_loaded()
-        self._build_size_vs_accuracy(figsize)
 
-    def plot_quantization_accuracy_delta(self, figsize=(14, 9)) -> None:
-        self._check_loaded()
-        self._build_quantization_accuracy_delta(figsize)
-
-    def plot_tflite_aggregated_scatter(self, figsize=(12, 7)) -> None:
-        self._check_loaded()
-        self._build_tflite_aggregated_scatter(figsize)
-
-    # ── plot builders ─────────────────────────────────────────────────────────
-
-    def _build_size_vs_accuracy(self, figsize=(13, 7)) -> None:
         variant_markers = {
             'float32':       ('o', 'float32'),
             'dynamic_quant': ('s', 'Dynamic Range'),
@@ -90,7 +70,9 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
                   title='Quantization', frameon=True, fontsize=9)
         self._save_fig('size_vs_accuracy.png')
 
-    def _build_quantization_accuracy_delta(self, figsize=(14, 9)) -> None:
+    def plot_quantization_accuracy_delta(self, figsize=(14, 9)) -> None:
+        self._check_loaded()
+        
         needed = ['model', 'dataset', 'strategy', 'test_accuracy',
                   'tflite_float32_accuracy', 'tflite_dynamic_quant_accuracy',
                   'tflite_int8_quant_accuracy']
@@ -176,7 +158,9 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
             ax.tick_params(axis='y', rotation=0)
         self._save_fig('quantization_accuracy_delta.png')
 
-    def _build_tflite_aggregated_scatter(self, figsize=(12, 7)) -> None:
+    def plot_tflite_aggregated_scatter(self, figsize=(12, 7)) -> None:
+        self._check_loaded()
+
         variant_markers = {
             'float32':       ('o', 'float32',       '#cccccc'),
             'dynamic_quant': ('s', 'Dynamic Range', '#888888'),
@@ -266,6 +250,3 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
         ax.legend(handles=var_h, loc='upper left',
                   title='Quantization', frameon=True, fontsize=8)
         self._save_fig('tflite_aggregated_scatter.png')
-
-
-print('ComparisonTFLiteHandler defined.')

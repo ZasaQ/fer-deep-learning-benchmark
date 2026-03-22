@@ -15,21 +15,12 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         visualizations_directory: str,
     ):
         super().__init__(
-            train_experiments_dir,
+            train_experiments_dir=train_experiments_dir,
             visualizations_directory=visualizations_directory,
         )
         print('ComparisonKerasHandler initialized.')
 
     # ── public ────────────────────────────────────────────────────────────
-
-    def run_all(self) -> None:
-        self._check_loaded()
-        print('Generating Keras comparison visualizations ...\n')
-        self.plot_accuracy_heatmap()
-        self.plot_f1_heatmap()
-        self.plot_learning_curves_overlay()
-        self.plot_per_class_f1_comparison()
-        print('\nDone.')
 
     def plot_accuracy_heatmap(self, figsize=(14, 8)) -> None:
         self._check_loaded()
@@ -51,54 +42,7 @@ class ComparisonKerasHandler(BaseComparisonHandler):
 
     def plot_learning_curves_overlay(self, figsize=(16, 10)) -> None:
         self._check_loaded()
-        self._build_learning_curves_overlay(figsize)
 
-    def plot_per_class_f1_comparison(self, figsize=(15, 9)) -> None:
-        self._check_loaded()
-        self._build_per_class_f1_comparison(figsize)
-
-    # ── plot builders ─────────────────────────────────────────────────────────
-
-    def _build_metric_heatmap(
-        self, metric: str, title: str, filename: str, figsize=(14, 8)
-    ) -> None:
-        df = self.df[['model', 'dataset', 'strategy', metric]].dropna(subset=[metric])
-        if df.empty:
-            print(f'  [skip] No data for metric "{metric}"')
-            return
-        pivot = df.pivot_table(
-            index=['model', 'strategy'], columns='dataset',
-            values=metric, aggfunc='mean',
-        )
-        idx_order = [(m, s) for m in self.MODEL_ORDER for s in self.STRATEGY_ORDER
-                     if (m, s) in pivot.index]
-        col_order = [d for d in self.DATASET_ORDER if d in pivot.columns]
-        pivot = pivot.reindex(idx_order)[col_order]
-
-        fig, ax = plt.subplots(figsize=figsize)
-        fig.suptitle(title, fontsize=13, fontweight='bold')
-        mask = pivot.isna()
-        sns.heatmap(pivot, ax=ax, mask=mask,
-                    annot=True, fmt='.3f', cmap='YlOrRd', vmin=0, vmax=1,
-                    linewidths=0.5, linecolor='#dddddd',
-                    cbar_kws={'label': metric.replace('_', ' ').title(), 'shrink': 0.75})
-        if mask.any().any():
-            sns.heatmap(pivot, ax=ax, mask=~mask,
-                        annot=False, cmap=['#eeeeee'], vmin=0, vmax=1,
-                        linewidths=0.5, linecolor='#dddddd', cbar=False)
-        cumsum = 0
-        for m in self.MODEL_ORDER:
-            cnt = sum(1 for (mm, _) in idx_order if mm == m)
-            cumsum += cnt
-            if cumsum < len(idx_order):
-                ax.axhline(cumsum, color='black', linewidth=1.8)
-        ax.set_xlabel('Dataset', labelpad=8)
-        ax.set_ylabel('Model / Strategy', labelpad=8)
-        ax.tick_params(axis='x', rotation=0)
-        ax.tick_params(axis='y', rotation=0)
-        self._save_fig(filename)
-
-    def _build_learning_curves_overlay(self, figsize=(16, 10)) -> None:
         datasets = [d for d in self.DATASET_ORDER
                     if any(r.dataset == d for r in self.records)]
         n_cols = 2
@@ -135,7 +79,9 @@ class ComparisonKerasHandler(BaseComparisonHandler):
                    bbox_to_anchor=(0.5, -0.04), frameon=False, fontsize=9)
         self._save_fig('learning_curves_overlay.png')
 
-    def _build_per_class_f1_comparison(self, figsize=(15, 9)) -> None:
+    def plot_per_class_f1_comparison(self, figsize=(15, 9)) -> None:
+        self._check_loaded()
+        
         datasets = [d for d in self.DATASET_ORDER
                     if any(r.dataset == d for r in self.records)]
         n_cols = 2
@@ -178,3 +124,43 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         fig.legend(handles=handles, loc='lower center', ncol=len(self.MODEL_ORDER),
                    bbox_to_anchor=(0.5, -0.03), frameon=False, fontsize=9)
         self._save_fig('per_class_f1_comparison.png')
+
+    # ── plot builders ─────────────────────────────────────────────────────────
+
+    def _build_metric_heatmap(
+        self, metric: str, title: str, filename: str, figsize: tuple) -> None:
+        df = self.df[['model', 'dataset', 'strategy', metric]].dropna(subset=[metric])
+        if df.empty:
+            print(f'  [skip] No data for metric "{metric}"')
+            return
+        pivot = df.pivot_table(
+            index=['model', 'strategy'], columns='dataset',
+            values=metric, aggfunc='mean',
+        )
+        idx_order = [(m, s) for m in self.MODEL_ORDER for s in self.STRATEGY_ORDER
+                     if (m, s) in pivot.index]
+        col_order = [d for d in self.DATASET_ORDER if d in pivot.columns]
+        pivot = pivot.reindex(idx_order)[col_order]
+
+        fig, ax = plt.subplots(figsize=figsize)
+        fig.suptitle(title, fontsize=13, fontweight='bold')
+        mask = pivot.isna()
+        sns.heatmap(pivot, ax=ax, mask=mask,
+                    annot=True, fmt='.3f', cmap='YlOrRd', vmin=0, vmax=1,
+                    linewidths=0.5, linecolor='#dddddd',
+                    cbar_kws={'label': metric.replace('_', ' ').title(), 'shrink': 0.75})
+        if mask.any().any():
+            sns.heatmap(pivot, ax=ax, mask=~mask,
+                        annot=False, cmap=['#eeeeee'], vmin=0, vmax=1,
+                        linewidths=0.5, linecolor='#dddddd', cbar=False)
+        cumsum = 0
+        for m in self.MODEL_ORDER:
+            cnt = sum(1 for (mm, _) in idx_order if mm == m)
+            cumsum += cnt
+            if cumsum < len(idx_order):
+                ax.axhline(cumsum, color='black', linewidth=1.8)
+        ax.set_xlabel('Dataset', labelpad=8)
+        ax.set_ylabel('Model / Strategy', labelpad=8)
+        ax.tick_params(axis='x', rotation=0)
+        ax.tick_params(axis='y', rotation=0)
+        self._save_fig(filename)

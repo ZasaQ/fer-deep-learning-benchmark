@@ -9,6 +9,16 @@ from .BaseComparisonHandler import BaseComparisonHandler
 class ComparisonKerasHandler(BaseComparisonHandler):
     """Handler for visualizing and comparing Keras training results across all experiments."""
 
+    VISUALIZATION_SUBDIRS = ['comparison_keras_visualizations']
+
+    METRICS_HEATMAP = [
+        ('test_accuracy',   'Test Accuracy'),
+        ('test_f1_macro',   'Macro F1 Score'),
+        ('precision_macro', 'Macro Precision'),
+        ('recall_macro',    'Macro Recall'),
+        ('macro_auc',       'Macro AUC'),
+    ]
+
     def __init__(
         self,
         train_experiments_dir: str,
@@ -20,25 +30,21 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         )
         print('ComparisonKerasHandler initialized.')
 
-    # ── public ────────────────────────────────────────────────────────────
+    # ── public ────────────────────────────────────────────────────────────────
 
-    def plot_accuracy_heatmap(self, figsize=(14, 8)) -> None:
+    def plot_metrics_heatmap(self, figsize=(14, 8)) -> None:
+        """Generate one heatmap per metric from METRICS_HEATMAP."""
         self._check_loaded()
-        self._build_metric_heatmap(
-            'test_accuracy',
-            'Test Accuracy  —  Model × Strategy × Dataset',
-            'accuracy_heatmap.png',
-            figsize,
-        )
-
-    def plot_f1_heatmap(self, figsize=(14, 8)) -> None:
-        self._check_loaded()
-        self._build_metric_heatmap(
-            'test_f1_macro',
-            'Macro F1 Score  —  Model × Strategy × Dataset',
-            'f1_heatmap.png',
-            figsize,
-        )
+        for metric, label in self.METRICS_HEATMAP:
+            if metric not in self.df.columns:
+                print(f'Column "{metric}" not in DataFrame')
+                continue
+            self._build_metric_heatmap(
+                metric,
+                f'{label}  —  Model × Strategy × Dataset',
+                f'{metric}_heatmap.png',
+                figsize,
+            )
 
     def plot_learning_curves_overlay(self, figsize=(16, 10)) -> None:
         self._check_loaded()
@@ -81,7 +87,7 @@ class ComparisonKerasHandler(BaseComparisonHandler):
 
     def plot_per_class_f1_comparison(self, figsize=(15, 9)) -> None:
         self._check_loaded()
-        
+
         datasets = [d for d in self.DATASET_ORDER
                     if any(r.dataset == d for r in self.records)]
         n_cols = 2
@@ -128,7 +134,8 @@ class ComparisonKerasHandler(BaseComparisonHandler):
     # ── plot builders ─────────────────────────────────────────────────────────
 
     def _build_metric_heatmap(
-        self, metric: str, title: str, filename: str, figsize: tuple) -> None:
+        self, metric: str, title: str, filename: str, figsize: tuple,
+    ) -> None:
         df = self.df[['model', 'dataset', 'strategy', metric]].dropna(subset=[metric])
         if df.empty:
             print(f'  [skip] No data for metric "{metric}"')
@@ -164,3 +171,6 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         ax.tick_params(axis='x', rotation=0)
         ax.tick_params(axis='y', rotation=0)
         self._save_fig(filename)
+
+
+print('ComparisonKerasHandler defined.')

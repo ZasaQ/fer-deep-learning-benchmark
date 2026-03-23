@@ -150,6 +150,9 @@ class TrainExperimentOrchestrator:
             strategy=self.config.get('strategy'),
         )
 
+        if self._model_handler is not None:
+            self.metrics.update(model=self._model_handler.to_metrics_dict())
+
         if self._training_handler is not None:
             self.metrics.update(training=self._training_handler.to_metrics_dict())
 

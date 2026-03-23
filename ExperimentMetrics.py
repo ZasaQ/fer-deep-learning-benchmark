@@ -63,6 +63,49 @@ class TrainingMetricsMixin:
 
 # ──────────────────────────────────────────────────────────────────────────────
 
+
+class ModelMetricsMixin:
+    """Mixin for ModelHandler."""
+ 
+    def to_metrics_dict(self) -> dict:
+        if self.model is None:
+            raise RuntimeError(
+                "No model found. Call build() before to_metrics_dict()."
+            )
+ 
+        params_total     = int(sum(np.prod(v.shape) for v in self.model.weights))
+        params_trainable = int(sum(np.prod(v.shape) for v in self.model.trainable_weights))
+        params_frozen    = params_total - params_trainable
+ 
+        layers_total     = len(self.model.layers)
+        layers_trainable = sum(1 for l in self.model.layers if l.trainable)
+        layers_frozen    = layers_total - layers_trainable
+ 
+        return {
+            'model_name':            self.config.get('model'),
+            'strategy':              self.config.get('strategy'),
+            'input_shape':           list(self.dataset_handler.input_shape),
+            'class_num':             self.dataset_handler.class_num,
+            'learning_rate':         self.config.get('learning_rate'),
+            'dropout_dense':         self.config.get('dropout_dense'),
+            'dense_units':           self.config.get('dense_units'),
+            'weight_decay':          self.config.get('weight_decay'),
+ 
+            # parameter counts
+            'model_params_total':     params_total,
+            'model_params_trainable': params_trainable,
+            'model_params_frozen':    params_frozen,
+ 
+            # layer counts
+            'model_layers_total':     layers_total,
+            'model_layers_trainable': layers_trainable,
+            'model_layers_frozen':    layers_frozen,
+        }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 class EvaluationMetricsMixin:
     """Mixin for EvaluationHandler."""
 
@@ -197,30 +240,45 @@ class TFLiteMetricsMixin:
             'tflite':                 tflite,
         }
 
-
+ 
 @dataclass
 class ExperimentMetrics:
-
+ 
     # ── identification ────────────────────────────────────────────────────────
-    experiment_name: Optional[str]   = None
-    model:      Optional[str]   = None
-    dataset:    Optional[str]   = None
-    strategy:   Optional[str]   = None
+    experiment_id:   str
+    model_name:      Optional[str]
+    dataset:         Optional[str]
+    strategy:        Optional[str]
     timestamp_start: Optional[str]   = None
     timestamp_stop:  Optional[str]   = None
     elapsed_seconds: Optional[float] = None
 
+    # ── model info ────────────────────────────────────────────────────────────
+    model_params_total:     Optional[int]   = None
+    model_params_trainable: Optional[int]   = None
+    model_params_frozen:    Optional[int]   = None
+    model_size_keras_kb:    Optional[float] = None
+    model_layers_total:     Optional[int]   = None
+    model_layers_trainable: Optional[int]   = None
+    model_layers_frozen:    Optional[int]   = None
+    input_shape:            Optional[list]  = None
+    learning_rate:          Optional[float] = None
+    dropout_dense:          Optional[float] = None
+    dense_units:            Optional[int]   = None
+    weight_decay:           Optional[float] = None
+ 
+ 
     # ── training config ───────────────────────────────────────────────────────
     epochs_configured:  Optional[int]   = None
     class_weights_mode: Optional[str]   = None
     label_smoothing:    Optional[float] = None
-
+ 
     # ── device ────────────────────────────────────────────────────────────────
     device:              Optional[str] = None
     gpu_count:           Optional[int] = None
     gpu_name:            Optional[str] = None
     gpu_memory_total_mb: Optional[int] = None
-
+ 
     # ── training ──────────────────────────────────────────────────────────────
     actual_epochs:            Optional[int]   = None
     best_epoch:               Optional[int]   = None
@@ -232,7 +290,7 @@ class ExperimentMetrics:
     train_val_gap:            Optional[float] = None
     acc_gap_at_best_epoch:    Optional[float] = None
     loss_gap_at_best_epoch:   Optional[float] = None
-
+ 
     # ── evaluation ────────────────────────────────────────────────────────────
     test_accuracy:   Optional[float] = None
     test_loss:       Optional[float] = None
@@ -241,7 +299,7 @@ class ExperimentMetrics:
     precision_macro: Optional[float] = None
     recall_macro:    Optional[float] = None
     macro_auc:       Optional[float] = None
-
+ 
     per_class_f1:        dict = field(default_factory=dict)
     per_class_precision: dict = field(default_factory=dict)
     per_class_recall:    dict = field(default_factory=dict)
@@ -250,64 +308,54 @@ class ExperimentMetrics:
     confusion_matrix:    list = field(default_factory=list)
     class_names:         list = field(default_factory=list)
     n_test_samples:      Optional[int] = None
-
+ 
     best_class:  Optional[str] = None
     worst_class: Optional[str] = None
     total_misclassifications: Optional[int]   = None
     misclassification_rate:   Optional[float] = None
-
+ 
     ece:         Optional[float] = None
     brier_score: Optional[float] = None
-
+ 
     # ── confidence ────────────────────────────────────────────────────────────
     confidence_mean_overall:   Optional[float] = None
     confidence_mean_correct:   Optional[float] = None
     confidence_mean_incorrect: Optional[float] = None
     confidence_mean_per_class: dict = field(default_factory=dict)
 
-    # ── model info ────────────────────────────────────────────────────────────
-    model_params_total:     Optional[int]   = None
-    model_params_trainable: Optional[int]   = None
-    model_size_keras_kb:    Optional[float] = None
-
     # ── tflite — keys: 'float32', 'dynamic_quant', 'int8_quant' ──────────────
     tflite: dict = field(default_factory=dict)
-
+ 
     # ── update API ────────────────────────────────────────────────────────────
-
+ 
     def update(self, *,
+               model:      Optional[dict] = None,
                training:   Optional[dict] = None,
                evaluation: Optional[dict] = None,
                tflite:     Optional[dict] = None) -> 'ExperimentMetrics':
         """Accept dicts from handler.to_metrics_dict(). Each argument is optional.
         Returns self to allow chaining."""
+        if model      is not None: self._apply(model)
         if training   is not None: self._apply(training)
         if evaluation is not None: self._apply(evaluation)
         if tflite     is not None: self._apply(tflite)
         return self
-
+ 
     def _apply(self, data: dict) -> None:
         """Write dict values into matching dataclass fields; unknown keys are ignored."""
         known = {f.name for f in fields(self)}
         for key, value in data.items():
             if key in known:
                 setattr(self, key, value)
-
+ 
     # ── serialization ─────────────────────────────────────────────────────────
-
+ 
     def to_dict(self) -> dict:
         """Nested dict — used as the archive JSON format."""
         return asdict(self)
-
+ 
     def to_flat_dict(self) -> dict:
-        """Flat dict suitable as a single pd.DataFrame row in nb02/nb03.
-
-        TFLite variants are prefixed: tflite_{variant}_{key}
-        e.g. tflite_float32_accuracy, tflite_dynamic_quant_f1_macro
-
-        Nested per-class dicts and confusion matrices are excluded from both
-        Keras and TFLite sections — use to_dict() for per-class analysis.
-        """
+        """Flat dict suitable as a single pd.DataFrame row in nb02/nb03."""
         _SKIP_TOP = {
             'per_class_f1', 'per_class_precision', 'per_class_recall',
             'per_class_accuracy', 'roc_auc_per_class', 'confusion_matrix',
@@ -317,14 +365,13 @@ class ExperimentMetrics:
             'per_class_accuracy', 'per_class_f1', 'per_class_precision',
             'per_class_recall', 'confusion_matrix', 'confidence',
         }
-
+ 
         flat = {
             f.name: getattr(self, f.name)
             for f in fields(self)
             if f.name not in _SKIP_TOP
         }
-
-        # one level of flattening per TFLite variant
+ 
         for variant, metrics in self.tflite.items():
             if not isinstance(metrics, dict):
                 continue
@@ -332,13 +379,13 @@ class ExperimentMetrics:
             for key, val in metrics.items():
                 if key not in _SKIP_TFLITE:
                     flat[f"{prefix}_{key}"] = val
-
+ 
         return flat
-
+ 
     def save(self, path: str) -> None:
         with open(path, 'w') as f:
             json.dump(self.to_dict(), f, indent=2)
-
+ 
     @classmethod
     def load(cls, path: str) -> 'ExperimentMetrics':
         with open(path, 'r') as f:

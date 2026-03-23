@@ -13,9 +13,10 @@ from tensorflow.keras import regularizers
 
 from .BaseHandler import BaseHandler
 from .DatasetHandler import DatasetHandler
+from ExperimentMetrics import ModelMetricsMixin
 
 
-class ModelHandler(BaseHandler):
+class ModelHandler(ModelMetricsMixin, BaseHandler):
     """
     Builds Keras models for all five FER architectures.
 

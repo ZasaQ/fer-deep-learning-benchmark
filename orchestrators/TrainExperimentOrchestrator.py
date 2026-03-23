@@ -145,7 +145,7 @@ class TrainExperimentOrchestrator:
         """
         self.metrics = ExperimentMetrics(
             experiment_name=self.experiment_name,
-            model=self.model_name,
+            model_name=self.model_name,
             dataset=self.config.get('dataset'),
             strategy=self.config.get('strategy'),
         )
@@ -221,7 +221,7 @@ class TrainExperimentOrchestrator:
     def save_latex_summaries(self) -> None:
         """Save LaTeX summary .tex files for all registered handlers."""
         print("\nSaving LaTeX summaries...")
-        for h in [
+        for handler in [
             self._dataset_handler,
             self._data_augmentation_handler,
             self._callbacks_handler,
@@ -230,13 +230,13 @@ class TrainExperimentOrchestrator:
             self._evaluation_handler,
             self._tflite_handler,
         ]:
-            if h is not None:
+            if handler is not None:
                 try:
-                    h.generate_summary(mode='latex')
+                    handler.generate_summary(mode='latex')
                 except NotImplementedError:
                     pass
                 except Exception as e:
-                    print(f"{h.__class__.__name__}.generate_summary() failed: {e}")
+                    print(f"{handler.__class__.__name__}.generate_summary() failed: {e}")
             else:
                 print('No LaTeX summaries to be saved')
 

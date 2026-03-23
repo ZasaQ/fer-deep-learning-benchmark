@@ -660,10 +660,9 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
 
         ax_box.set_title('Metric Values', fontsize=10, fontweight='bold', pad=10)
 
-        plt.suptitle('Keras vs Quantized Variants - Radar Chart',
-                     fontsize=13, fontweight='bold', y=1.02)
+        plt.suptitle('Keras vs Quantized Variants', y=1.02)
         plt.tight_layout()
-        self._save_fig('radar_chart.png')
+        self._save_fig('keras_vs_quantized_radar_chart.png')
 
     def plot_quantization_error_heatmap(self, figsize: Tuple[int, int] = (14, 5)) -> None:
         """
@@ -923,48 +922,42 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         if n_variants == 1:
             axes = [axes]
  
-        fig.suptitle('Per-Class F1 Delta', fontsize=12, fontweight='bold')
- 
-        for ax, mt in zip(axes, tflite_types):
+        for ax_idx, (ax, mt) in enumerate(zip(axes, tflite_types)):
             delta  = delta_matrices[mt]
             x      = np.arange(len(self.class_labels))
             colors = ['#e74c3c' if d < 0 else '#2ecc71' for d in delta]
  
-            bars = ax.barh(x, delta, color=colors, alpha=0.82, edgecolor='white')
-            ax.axvline(0, color='black', linewidth=1.0, alpha=0.6)
+            bars = ax.barh(x, delta, color=colors, alpha=0.8, edgecolor='white')
+            ax.axvline(0, color='#444444', linestyle='--', linewidth=1.2, alpha=0.5)
  
+            # delta value outside bar end
             for bar, val in zip(bars, delta):
                 if np.isnan(val):
                     continue
                 if val >= 0:
                     ax.text(val + abs_max * 0.03, bar.get_y() + bar.get_height() / 2,
-                            f'{val:+.3f}', va='center', ha='left', fontsize=8)
+                            f'{val:+.3f}', va='center', ha='left', fontsize=9)
                 else:
                     ax.text(val - abs_max * 0.03, bar.get_y() + bar.get_height() / 2,
-                            f'{val:+.3f}', va='center', ha='right', fontsize=8)
+                            f'{val:+.3f}', va='center', ha='right', fontsize=9)
+ 
+            if ax_idx == 0:
+                for i, label in enumerate(self.class_labels):
+                    ax.text(-abs_max * 1.32, i,
+                            f'({keras_f1.get(label, float("nan")):.2f})',
+                            va='center', ha='left', fontsize=9, color='#444444')
  
             ax.set_yticks(x)
-            ax.set_yticklabels(self.class_labels, fontsize=9)
-            ax.set_xlim(-abs_max * 1.35, abs_max * 1.35)
+            ax.set_yticklabels(self.class_labels if ax_idx == 0 else [], fontsize=9)
+            ax.set_xlim(-abs_max * 1.55, abs_max * 1.35)
             ax.set_xlabel('Delta F1 Score')
-            ax.set_title(self._LABEL_MAP.get(mt, mt), fontsize=11)
+            ax.set_title(self._LABEL_MAP.get(mt, mt))
             ax.grid(axis='x', alpha=0.3)
  
-            keras_lines = '\n'.join(
-                f'{l}: {keras_f1.get(l, float("nan")):.2f}'
-                for l in self.class_labels
-            )
-            ax.annotate(
-                f'Keras F1\n{keras_lines}',
-                xy=(0.98, 0.02),
-                xycoords='axes fraction',
-                ha='right', va='bottom',
-                fontsize=7,
-                color='#555555',
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
-                          edgecolor='lightgray', alpha=0.85),
-            )
+        axes[0].text(-abs_max * 1.32, -0.7, 'Keras',
+                     va='top', ha='left', fontsize=9, color='#444444', style='italic')
  
+        plt.suptitle('Per-Class F1 Delta')
         plt.tight_layout()
         self._save_fig('per_class_f1_delta.png')
 

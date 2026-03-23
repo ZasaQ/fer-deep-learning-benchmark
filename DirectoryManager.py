@@ -42,16 +42,7 @@ class DirectoryManager:
         return self.root
 
     def create_dir(self, path: str, key: Optional[str] = None) -> str:
-        """
-        Create an arbitrary directory and register it in paths.
-
-        Parameters
-        ----------
-        path : str
-            Directory path to create (absolute or relative).
-        key : str, optional
-            Key to register in paths. Defaults to the last component of path.
-        """
+        """Create an arbitrary directory and register it in paths."""
         os.makedirs(path, exist_ok=True)
         registered_key = key or os.path.basename(path)
         self.paths[registered_key] = path

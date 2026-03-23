@@ -171,6 +171,3 @@ class ComparisonKerasHandler(BaseComparisonHandler):
         ax.tick_params(axis='x', rotation=0)
         ax.tick_params(axis='y', rotation=0)
         self._save_fig(filename)
-
-
-print('ComparisonKerasHandler defined.')

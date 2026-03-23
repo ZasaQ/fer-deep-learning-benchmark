@@ -245,7 +245,7 @@ class TFLiteMetricsMixin:
 class ExperimentMetrics:
  
     # ── identification ────────────────────────────────────────────────────────
-    experiment_id:   str
+    experiment_name:   str
     model_name:      Optional[str]
     dataset:         Optional[str]
     strategy:        Optional[str]

@@ -881,10 +881,9 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
 
     def plot_per_class_f1_delta(self, figsize: Tuple[int, int] = (14, 5)) -> None:
         has_f1 = any('per_class_f1' in r for r in self.benchmark_results.values())
-        if not self._guard(has_f1,
-                           'No per-class F1 found. Call benchmark_all() first.'):
+        if not self._guard(has_f1, 'No per-class F1 found. Call benchmark_all() first.'):
             return
- 
+
         has_keras_f1 = (
             self.keras_model is not None
             and self.evaluation_handler is not None
@@ -893,7 +892,7 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         if not has_keras_f1:
             print('No Keras per-class F1 available. Call evaluation_handler.predict() first.')
             return
- 
+
         report   = self.evaluation_handler.report
         keras_f1 = {
             label: report[label]['f1-score']
@@ -903,34 +902,33 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         tflite_types = [mt for mt in self.benchmark_results
                         if 'per_class_f1' in self.benchmark_results[mt]]
         n_variants   = len(tflite_types)
- 
+
         if n_variants == 0:
             print('No TFLite variants with per_class_f1.')
             return
- 
+
         keras_arr      = np.array([keras_f1.get(l, np.nan) for l in self.class_labels])
         delta_matrices = {}
         for mt in tflite_types:
             tflite_f1  = self.benchmark_results[mt]['per_class_f1']
             tflite_arr = np.array([tflite_f1.get(l, np.nan) for l in self.class_labels])
             delta_matrices[mt] = tflite_arr - keras_arr
- 
+
         abs_max = max(np.nanmax(np.abs(dm)) for dm in delta_matrices.values())
         abs_max = max(abs_max, 0.01)
- 
+
         fig, axes = plt.subplots(1, n_variants, figsize=figsize, sharey=True)
         if n_variants == 1:
             axes = [axes]
- 
+
         for ax_idx, (ax, mt) in enumerate(zip(axes, tflite_types)):
             delta  = delta_matrices[mt]
             x      = np.arange(len(self.class_labels))
             colors = ['#e74c3c' if d < 0 else '#2ecc71' for d in delta]
- 
+
             bars = ax.barh(x, delta, color=colors, alpha=0.8, edgecolor='white')
             ax.axvline(0, color='#444444', linestyle='--', linewidth=1.2, alpha=0.5)
- 
-            # delta value outside bar end
+
             for bar, val in zip(bars, delta):
                 if np.isnan(val):
                     continue
@@ -940,24 +938,25 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
                 else:
                     ax.text(val - abs_max * 0.03, bar.get_y() + bar.get_height() / 2,
                             f'{val:+.3f}', va='center', ha='right', fontsize=9)
- 
-            if ax_idx == 0:
-                for i, label in enumerate(self.class_labels):
-                    ax.text(-abs_max * 1.32, i,
-                            f'({keras_f1.get(label, float("nan")):.2f})',
-                            va='center', ha='left', fontsize=9, color='#444444')
- 
+
             ax.set_yticks(x)
-            ax.set_yticklabels(self.class_labels if ax_idx == 0 else [], fontsize=9)
-            ax.set_xlim(-abs_max * 1.55, abs_max * 1.35)
+
+            if ax_idx == 0:
+                tick_labels = [
+                    f"{label}  ({keras_f1.get(label, float('nan')):.2f})"
+                    for label in self.class_labels
+                ]
+                ax.set_yticklabels(tick_labels, fontsize=9)
+                ax.set_ylabel('(Keras F1)', fontsize=8, color='#666666', style='italic')
+            else:
+                ax.set_yticklabels([])
+
+            ax.set_xlim(-abs_max * 1.45, abs_max * 1.35)
             ax.set_xlabel('Delta F1 Score')
             ax.set_title(self._LABEL_MAP.get(mt, mt))
             ax.grid(axis='x', alpha=0.3)
- 
-        axes[0].text(-abs_max * 1.32, -0.7, 'Keras',
-                     va='top', ha='left', fontsize=9, color='#444444', style='italic')
- 
-        plt.suptitle('Per-Class F1 Delta')
+
+        plt.suptitle('Per-Class F1 Delta', fontweight='bold')
         plt.tight_layout()
         self._save_fig('per_class_f1_delta.png')
 

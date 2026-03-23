@@ -1301,7 +1301,7 @@ class EvaluationHandler(EvaluationMetricsMixin, BaseHandler):
         ax2.grid(axis='y', alpha=0.3)
 
         plt.suptitle(
-            f'Calibration Curve | {self.config["dataset"]} | {self.config["model"]}',
+            f'Calibration Curve',
             fontweight='bold'
         )
         plt.tight_layout()

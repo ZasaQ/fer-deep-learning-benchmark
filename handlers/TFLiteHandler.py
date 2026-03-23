@@ -5,15 +5,18 @@ from typing import Optional, List, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import (
+    accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
+)
 
 from .BaseHandler import BaseHandler
 from .DatasetHandler import DatasetHandler
 from .DataAugmentationHandler import DataAugmentationHandler
 from .EvaluationHandler import EvaluationHandler
+from ExperimentMetrics import TFLiteMetricsMixin
 
 
-class TFLiteHandler(BaseHandler):
+class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
     """Handles TensorFlow Lite conversion, benchmarking and mobile deployment visualization."""
 
     _COLOR_MAP = {
@@ -70,14 +73,6 @@ class TFLiteHandler(BaseHandler):
             'int8_quant':    self.tflite_quant_int8,
         }
 
-    def _resolved_class_names(self, all_classes: List[int]) -> List[str]:
-        if self.class_names:
-            return [
-                self.class_names[c] if c < len(self.class_names) else str(c)
-                for c in all_classes
-            ]
-        return [str(c) for c in all_classes]
-
     def _style_lists(self, keys: List[str]) -> Tuple[List[str], List[str]]:
         labels = [self._LABEL_MAP[k] for k in keys]
         colors = [self._COLOR_MAP[k] for k in keys]
@@ -111,7 +106,22 @@ class TFLiteHandler(BaseHandler):
             return gen.n
         return len(gen) * getattr(gen, 'batch_size', 32)
 
-    # ── keras model registration ─────────────────────────────
+    def _compute_confidence_stats(self,
+                                   y_pred_proba: np.ndarray,
+                                   y_true: np.ndarray,
+                                   y_pred: np.ndarray) -> dict:
+        confidence = np.max(y_pred_proba, axis=1)
+        correct    = (y_pred == y_true)
+        return {
+            'mean_overall':   float(np.mean(confidence)),
+            'mean_correct':   float(np.mean(confidence[correct]))   if correct.any()   else None,
+            'mean_incorrect': float(np.mean(confidence[~correct]))  if (~correct).any() else None,
+            'mean_per_class': {
+                self.class_labels[i]: float(np.mean(confidence[y_true == i]))
+                if np.any(y_true == i) else None
+                for i in range(len(self.class_labels))
+            },
+        }
 
     def register_keras_model(self, accuracy: Optional[float] = None) -> None:
         """Register Keras model accuracy and size."""
@@ -163,7 +173,7 @@ class TFLiteHandler(BaseHandler):
         self.register_keras_model(accuracy=ev.test_accuracy)
 
         per_class_accuracy = {
-            i: float(ev.per_class_acc[i])
+            ev.dataset_handler.class_labels[i]: float(ev.per_class_acc[i])
             for i in range(len(ev.dataset_handler.class_labels))
         }
         self.keras_model['per_class_accuracy'] = per_class_accuracy
@@ -327,11 +337,14 @@ class TFLiteHandler(BaseHandler):
         i_scale, i_zero = input_details[0].get('quantization', (1.0, 0))
         o_scale, o_zero = output_details[0].get('quantization', (1.0, 0))
 
+        is_int_output = output_dtype in (np.uint8, np.int8)
+
         total       = self._total_test_samples()
         test_gen    = self._prepare_test_generator(shuffle=shuffle)
         max_batches = len(test_gen)
 
-        y_true, y_pred, times = [], [], []
+        y_true, y_pred, times          = [], [], []
+        y_pred_proba_list              = []
         processed = 0
 
         print(f'Benchmarking {model_type} on full test set ({total} samples)...')
@@ -356,8 +369,10 @@ class TFLiteHandler(BaseHandler):
                 times.append((time.time() - start) * 1000)
 
                 output_data = interpreter.get_tensor(output_details[0]['index'])
-                if output_dtype in (np.uint8, np.int8):
+                if is_int_output:
                     output_data = (output_data.astype(np.float32) - o_zero) * o_scale
+                else:
+                    y_pred_proba_list.append(output_data[0].copy())
 
                 y_true.append(np.argmax(label))
                 y_pred.append(np.argmax(output_data))
@@ -378,30 +393,69 @@ class TFLiteHandler(BaseHandler):
         if len(unique_classes) < len(self.class_labels):
             print(f'WARNING: Only {len(unique_classes)}/{len(self.class_labels)} classes represented.')
 
-        per_class = {}
+        per_class_accuracy = {}
+        per_class_f1       = {}
+        per_class_precision = {}
+        per_class_recall   = {}
+
         for i in range(len(self.class_labels)):
-            mask = (y_true == i)
-            per_class[i] = (
-                float(np.mean(y_pred[mask] == y_true[mask]))
-                if np.any(mask) else np.nan
-            )
+            label_name = self.class_labels[i]
+            mask       = (y_true == i)
+            if np.any(mask):
+                per_class_accuracy[label_name]  = float(np.mean(y_pred[mask] == y_true[mask]))
+                per_class_f1[label_name]        = float(f1_score(y_true, y_pred, labels=[i], average='macro', zero_division=0))
+                per_class_precision[label_name] = float(precision_score(y_true, y_pred, labels=[i], average='macro', zero_division=0))
+                per_class_recall[label_name]    = float(recall_score(y_true, y_pred, labels=[i], average='macro', zero_division=0))
+            else:
+                per_class_accuracy[label_name]  = float('nan')
+                per_class_f1[label_name]        = float('nan')
+                per_class_precision[label_name] = float('nan')
+                per_class_recall[label_name]    = float('nan')
+
+        keras_size_kb = None
+        keras_acc     = None
+        if self.keras_model is not None:
+            keras_size_kb = self.keras_model.get('file_size_kb', self.keras_model.get('model_size_kb'))
+            keras_acc     = self.keras_model.get('accuracy')
+
+        size_kb          = self.model_sizes[model_type] / 1024
+        compression_ratio = round(keras_size_kb / size_kb, 3) if keras_size_kb else None
+        accuracy_val      = accuracy_score(y_true, y_pred)
+        accuracy_delta    = round(accuracy_val - keras_acc, 6) if keras_acc is not None else None
 
         results = {
             'model_type':             model_type,
-            'accuracy':               accuracy_score(y_true, y_pred),
-            'per_class_accuracy':     per_class,
+            'accuracy':               accuracy_val,
+            'accuracy_delta_vs_keras': accuracy_delta,
+            'f1_macro':               float(f1_score(y_true, y_pred, average='macro',    zero_division=0)),
+            'f1_weighted':            float(f1_score(y_true, y_pred, average='weighted', zero_division=0)),
+            'per_class_accuracy':     per_class_accuracy,
+            'per_class_f1':           per_class_f1,
+            'per_class_precision':    per_class_precision,
+            'per_class_recall':       per_class_recall,
+            'confusion_matrix':       confusion_matrix(y_true, y_pred).tolist(),
             'mean_inference_time_ms': float(np.mean(times)),
             'std_inference_time_ms':  float(np.std(times)),
             'p95_inference_time_ms':  float(np.percentile(times, 95)),
-            'model_size_kb':          self.model_sizes[model_type] / 1024,
+            'model_size_kb':          round(size_kb, 5),
+            'compression_ratio':      compression_ratio,
             'samples_tested':         processed,
         }
+
+        if not is_int_output and y_pred_proba_list:
+            y_pred_proba = np.array(y_pred_proba_list)
+            results['confidence'] = self._compute_confidence_stats(y_pred_proba, y_true, y_pred)
+        else:
+            results['confidence'] = None
+
         if save_raw:
             results['raw_inference_times_ms'] = times
 
         print(f'  Accuracy:        {results["accuracy"]:.4f}')
+        print(f'  F1 macro:        {results["f1_macro"]:.4f}')
         print(f'  Mean inference:  {results["mean_inference_time_ms"]:.2f} ms')
         print(f'  P95 inference:   {results["p95_inference_time_ms"]:.2f} ms')
+        print(f'  Compression:     {compression_ratio}x' if compression_ratio else '  Compression:     n/a')
         print(f'  Samples tested:  {processed}')
 
         self.benchmark_results[model_type] = results
@@ -606,26 +660,20 @@ class TFLiteHandler(BaseHandler):
 
         ax_box.set_title('Metric Values', fontsize=10, fontweight='bold', pad=10)
 
-        plt.suptitle('Keras vs Quantized Variants - Radar Chart',
-                     fontsize=13, fontweight='bold', y=1.02)
+        plt.suptitle('Keras vs Quantized Variants', y=1.02)
         plt.tight_layout()
-        self._save_fig('radar_chart.png')
+        self._save_fig('keras_vs_quantized_radar_chart.png')
 
     def plot_quantization_error_heatmap(self, figsize: Tuple[int, int] = (14, 5)) -> None:
         """
-        Per-class accuracy heatmap for all models (Keras + TFLite variants),
-        and delta vs Keras/Float32 baseline (TFLite only).
+        Per-class accuracy heatmap for all models.
         """
         has_per_class = any('per_class_accuracy' in r for r in self.benchmark_results.values())
         if not self._guard(has_per_class,
                            'No per-class accuracy found. Call benchmark_all() first.'):
             return
 
-        all_classes = sorted(set(
-            c for r in self.benchmark_results.values()
-            for c in r.get('per_class_accuracy', {}).keys()
-        ))
-        class_names = self._resolved_class_names(all_classes)
+        all_class_names = self.class_labels
 
         tflite_types = [mt for mt in self.benchmark_results
                         if 'per_class_accuracy' in self.benchmark_results[mt]]
@@ -648,18 +696,18 @@ class TFLiteHandler(BaseHandler):
         row_labels = [r[0] for r in rows]
         row_colors = [r[1] for r in rows]
         acc_matrix = np.array([
-            [r[2].get(c, np.nan) for c in all_classes]
+            [r[2].get(cn, np.nan) for cn in all_class_names]
             for r in rows
         ])
 
         if has_keras_per_class:
-            baseline_row   = np.array([self.keras_model['per_class_accuracy'].get(c, np.nan) for c in all_classes])
+            baseline_row   = np.array([self.keras_model['per_class_accuracy'].get(cn, np.nan) for cn in all_class_names])
             baseline_label = 'Keras'
             tflite_rows    = [r for r in rows if r[0] != 'Keras']
             tflite_labels  = [r[0] for r in tflite_rows]
             tflite_colors  = [r[1] for r in tflite_rows]
             drop_matrix    = np.array([
-                [r[2].get(c, np.nan) for c in all_classes]
+                [r[2].get(cn, np.nan) for cn in all_class_names]
                 for r in tflite_rows
             ]) - baseline_row
         elif 'float32' in tflite_types:
@@ -681,8 +729,8 @@ class TFLiteHandler(BaseHandler):
         ax = axes[0]
         im = ax.imshow(acc_matrix, aspect='auto', cmap='RdYlGn', vmin=0.0, vmax=1.0)
         plt.colorbar(im, ax=ax, label='Accuracy')
-        ax.set_xticks(range(len(class_names)))
-        ax.set_xticklabels(class_names, rotation=45, ha='right', fontsize=9)
+        ax.set_xticks(range(len(all_class_names)))
+        ax.set_xticklabels(all_class_names, rotation=45, ha='right', fontsize=9)
         ax.set_yticks(range(len(row_labels)))
         ax.set_yticklabels(row_labels, fontsize=10)
         ax.set_title('Per-Class Accuracy')
@@ -696,7 +744,7 @@ class TFLiteHandler(BaseHandler):
             ax.axhline(y=0.5, color='white', linewidth=3)
 
         for i in range(len(row_labels)):
-            for j in range(len(class_names)):
+            for j in range(len(all_class_names)):
                 val = acc_matrix[i, j]
                 if not np.isnan(val):
                     ax.text(j, i, f'{val:.2f}', ha='center', va='center', fontsize=8,
@@ -708,8 +756,8 @@ class TFLiteHandler(BaseHandler):
             im2    = ax2.imshow(drop_matrix, aspect='auto', cmap='RdBu',
                                 vmin=-absmax, vmax=absmax)
             plt.colorbar(im2, ax=ax2, label='Accuracy Delta Difference')
-            ax2.set_xticks(range(len(class_names)))
-            ax2.set_xticklabels(class_names, rotation=45, ha='right', fontsize=9)
+            ax2.set_xticks(range(len(all_class_names)))
+            ax2.set_xticklabels(all_class_names, rotation=45, ha='right', fontsize=9)
             ax2.set_yticks(range(len(tflite_labels)))
             ax2.set_yticklabels(tflite_labels, fontsize=10)
             ax2.set_title(f'Per-Class Delta vs {baseline_label}')
@@ -718,7 +766,7 @@ class TFLiteHandler(BaseHandler):
                 tick.set_color(color)
 
             for i in range(len(tflite_labels)):
-                for j in range(len(class_names)):
+                for j in range(len(all_class_names)):
                     val = drop_matrix[i, j]
                     if not np.isnan(val):
                         ax2.text(j, i, f'{val:+.2f}', ha='center', va='center', fontsize=8,
@@ -831,7 +879,86 @@ class TFLiteHandler(BaseHandler):
         plt.suptitle('Keras vs TFLite Performance Comparison')
         self._save_fig('full_comparison.png')
 
-    # ── summary ──────────────────────────────────────────────
+    def plot_per_class_f1_delta(self, figsize: Tuple[int, int] = (14, 5)) -> None:
+        has_f1 = any('per_class_f1' in r for r in self.benchmark_results.values())
+        if not self._guard(has_f1, 'No per-class F1 found. Call benchmark_all() first.'):
+            return
+
+        has_keras_f1 = (
+            self.keras_model is not None
+            and self.evaluation_handler is not None
+            and self.evaluation_handler.report is not None
+        )
+        if not has_keras_f1:
+            print('No Keras per-class F1 available. Call evaluation_handler.predict() first.')
+            return
+
+        report   = self.evaluation_handler.report
+        keras_f1 = {
+            label: report[label]['f1-score']
+            for label in self.class_labels
+            if label in report
+        }
+        tflite_types = [mt for mt in self.benchmark_results
+                        if 'per_class_f1' in self.benchmark_results[mt]]
+        n_variants   = len(tflite_types)
+
+        if n_variants == 0:
+            print('No TFLite variants with per_class_f1.')
+            return
+
+        keras_arr      = np.array([keras_f1.get(l, np.nan) for l in self.class_labels])
+        delta_matrices = {}
+        for mt in tflite_types:
+            tflite_f1  = self.benchmark_results[mt]['per_class_f1']
+            tflite_arr = np.array([tflite_f1.get(l, np.nan) for l in self.class_labels])
+            delta_matrices[mt] = tflite_arr - keras_arr
+
+        abs_max = max(np.nanmax(np.abs(dm)) for dm in delta_matrices.values())
+        abs_max = max(abs_max, 0.01)
+
+        fig, axes = plt.subplots(1, n_variants, figsize=figsize, sharey=True)
+        if n_variants == 1:
+            axes = [axes]
+
+        for ax_idx, (ax, mt) in enumerate(zip(axes, tflite_types)):
+            delta  = delta_matrices[mt]
+            x      = np.arange(len(self.class_labels))
+            colors = ['#e74c3c' if d < 0 else '#2ecc71' for d in delta]
+
+            bars = ax.barh(x, delta, color=colors, alpha=0.8, edgecolor='white')
+            ax.axvline(0, color='#444444', linestyle='--', linewidth=1.2, alpha=0.5)
+
+            for bar, val in zip(bars, delta):
+                if np.isnan(val):
+                    continue
+                if val >= 0:
+                    ax.text(val + abs_max * 0.03, bar.get_y() + bar.get_height() / 2,
+                            f'{val:+.3f}', va='center', ha='left', fontsize=9)
+                else:
+                    ax.text(val - abs_max * 0.03, bar.get_y() + bar.get_height() / 2,
+                            f'{val:+.3f}', va='center', ha='right', fontsize=9)
+
+            ax.set_yticks(x)
+
+            if ax_idx == 0:
+                tick_labels = [
+                    f"{label}  ({keras_f1.get(label, float('nan')):.2f})"
+                    for label in self.class_labels
+                ]
+                ax.set_yticklabels(tick_labels, fontsize=9)
+                ax.set_ylabel('(Keras F1)', fontsize=8, color='#666666', style='italic')
+
+            ax.set_xlim(-abs_max * 1.45, abs_max * 1.35)
+            ax.set_xlabel('Delta F1 Score')
+            ax.set_title(self._LABEL_MAP.get(mt, mt))
+            ax.grid(axis='x', alpha=0.3)
+
+        plt.suptitle('Per-Class F1 Delta', fontweight='bold')
+        plt.tight_layout()
+        self._save_fig('per_class_f1_delta.png')
+
+    # ── summary ──────────────────────────────────────
 
     def generate_summary(self, mode: str) -> None:
         summary_data = [
@@ -867,7 +994,7 @@ class TFLiteHandler(BaseHandler):
             if keras_size is not None:
                 size_diff   = results['model_size_kb'] - keras_size
                 size_str    = f"{results['model_size_kb']:.2f} ({'+' if size_diff >= 0 else ''}{size_diff:.2f} KB)"
-                compression = f"{keras_size / results['model_size_kb']:.2f}x"
+                compression = f"{results.get('compression_ratio', keras_size / results['model_size_kb']):.2f}x"
 
             model_accuracy = f"{results['accuracy']:.4f}"
             if keras_accuracy is not None:
@@ -889,6 +1016,7 @@ class TFLiteHandler(BaseHandler):
             summary_data += [
                 None,
                 (f'{label} accuracy',         model_accuracy),
+                (f'{label} F1 macro',         f"{results.get('f1_macro', 0):.4f}"),
                 (f'{label} size (KB)',        size_str),
                 (f'{label} compression',      compression),
                 (f'{label} mean inference',   mean_str),

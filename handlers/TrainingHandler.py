@@ -26,16 +26,18 @@ class TrainingHandler(BaseHandler):
         self.data_augmentation_handler = data_augmentation_handler
         super().__init__(visualizations_directory)
 
-        self.history:     None
-        self.fit_start:   Optional[datetime.datetime] = None
-        self.fit_stop:    Optional[datetime.datetime] = None
-        self.fit_elapsed: Optional[float]             = None
-        self.device_info: dict                        = self._collect_device_info()
+        self.history:     Optional[tf.keras.callbacks.History] = None
+        self.fit_start:   Optional[datetime.datetime]          = None
+        self.fit_stop:    Optional[datetime.datetime]          = None
+        self.fit_elapsed: Optional[float]                      = None
+        self.device_info: dict                                 = self._collect_device_info()
 
         self.best_val_accuracy: Optional[float] = None
         self.best_val_loss:     Optional[float] = None
         self.best_epoch:        Optional[int]   = None
         self.epochs_run:        Optional[int]   = None
+
+        self.best_val_acc_epoch: Optional[int] = None
 
         self.acc_gap:  Optional[np.ndarray] = None
         self.loss_gap: Optional[np.ndarray] = None
@@ -46,9 +48,7 @@ class TrainingHandler(BaseHandler):
 
     @staticmethod
     def _collect_device_info() -> dict:
-        """
-        Collect GPU info via TensorFlow + nvidia-smi.
-        """
+        """Collect GPU info via TensorFlow + nvidia-smi."""
         info = {
             'device':    'CPU',
             'gpu_count': 0,
@@ -173,24 +173,39 @@ class TrainingHandler(BaseHandler):
         self.fit_stop    = datetime.datetime.now()
         self.fit_elapsed = (self.fit_stop - self.fit_start).total_seconds()
 
-        val_loss = self.history.history['val_loss']
-        val_acc  = self.history.history['val_accuracy']
+        self.train_acc = self.history.history.get('accuracy', [])
+        self.val_acc   = self.history.history.get('val_accuracy', [])
+        self.train_loss = self.history.history.get('loss', [])
+        self.val_loss  = self.history.history.get('val_loss', [])
 
-        self.best_epoch        = int(np.argmin(val_loss)) + 1
-        self.best_val_loss     = float(min(val_loss))
-        self.best_val_accuracy = float(max(val_acc))
-        self.epochs_run        = len(val_loss)
+        self.best_val_acc_epoch = int(np.argmax(self.history.history['val_accuracy'])) + 1
+
+        self.best_epoch        = int(np.argmin(self.val_loss)) + 1
+        self.best_val_loss     = float(min(self.val_loss))
+        self.best_val_accuracy = float(max(self.val_acc))
+        self.epochs_run        = len(self.val_loss)
+        
+        if self.train_acc and self.val_acc:
+            self.acc_gap = np.array(self.train_acc) - np.array(self.val_acc)
+            
+        if self.train_loss and self.val_loss:
+            self.loss_gap = np.array(self.val_loss) - np.array(self.train_loss)
+
+        self.early_stopped = self.epochs_run < self.config['epochs']
+        self.train_val_gap = round(float(self.acc_gap[-1]), 4) if self.acc_gap is not None else None
 
         print(f"\nTraining complete.")
         print(f"  Started:           {self.fit_start.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"  Stopped:           {self.fit_stop.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"  Elapsed:           {self._fmt_duration(self.fit_elapsed)}")
+        print(f"  Epochs:            {self.epochs_run}/{self.config['epochs']}"
+              + (" (early stopping)" if self.early_stopped else ""))
+        print(f"  Best epoch:        {self.best_epoch}")
         print(f"  Best val_loss:     {self.best_val_loss:.4f}")
         print(f"  Best val_accuracy: {self.best_val_accuracy:.4f}")
+        print(f"  Train/val gap:     {self.train_val_gap}" if self.train_val_gap is not None else "  Train/val gap:     n/a")
 
         return self.history
-
-    # ── visualizations ───────────────────────────────────────
 
     @staticmethod
     def _smart_annotate(ax, x, y, label, color, x_range, offset_right=(8, -14), offset_left=(-8, -14)):
@@ -208,16 +223,15 @@ class TrainingHandler(BaseHandler):
             fontsize=8, fontweight='bold', color=color, ha=ha
         )
 
+    # ── visualizations ───────────────────────────────────────
+
     def plot_learning_curves(self, figsize: Tuple[int, int] = (14, 5)) -> None:
         """Plot training and validation accuracy and loss over epochs."""
         if not self._guard(self.history is not None, "No training history. Call train() first."):
             return
 
-        h      = self.history.history
-        epochs = range(1, len(h['loss']) + 1)
-
-        best_epoch         = int(np.argmin(h['val_loss'])) + 1
-        best_val_acc_epoch = int(np.argmax(h['val_accuracy'])) + 1
+        history      = self.history.history
+        epochs = range(1, len(history['loss']) + 1)
 
         COLOR_TRAIN = '#2980b9'
         COLOR_VAL   = '#e74c3c'
@@ -225,12 +239,12 @@ class TrainingHandler(BaseHandler):
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 
         # Accuracy PLot
-        final_train_acc = h['accuracy'][-1]
-        final_val_acc   = h['val_accuracy'][-1]
+        final_train_acc = history['accuracy'][-1]
+        final_val_acc   = history['val_accuracy'][-1]
 
-        ax1.plot(epochs, h['accuracy'],     label='Train', linewidth=2, color=COLOR_TRAIN)
-        ax1.plot(epochs, h['val_accuracy'], label='Val',   linewidth=2, color=COLOR_VAL)
-        ax1.axvline(x=best_val_acc_epoch, color=COLOR_VAL, linestyle=':', label='Max val accuracy')
+        ax1.plot(epochs, history['accuracy'],     label='Train', linewidth=2, color=COLOR_TRAIN)
+        ax1.plot(epochs, history['val_accuracy'], label='Val',   linewidth=2, color=COLOR_VAL)
+        ax1.axvline(x=self.best_val_acc_epoch, color=COLOR_VAL, linestyle=':', label='Max val accuracy')
         ax1.set_xlim(1, max(epochs))
         ax1.set_ylim(0, 1.05)
         ax1.set_xlabel('Epoch')
@@ -239,12 +253,12 @@ class TrainingHandler(BaseHandler):
             f'Training & Validation Accuracy\n'
             f'Final Train: {final_train_acc:.4f}  |  Final Val: {final_val_acc:.4f}'
         )
-        ticks = sorted(set([int(t) for t in ax1.get_xticks() if 1 <= t <= max(epochs)] + [best_val_acc_epoch]))
+        ticks = sorted(set([int(t) for t in ax1.get_xticks() if 1 <= t <= max(epochs)] + [self.best_val_acc_epoch]))
         ax1.set_xticks(ticks)
-        ax1.set_xticklabels([f'*{t}' if t == best_val_acc_epoch else str(t) for t in ticks])
+        ax1.set_xticklabels([f'*{t}' if t == self.best_val_acc_epoch else str(t) for t in ticks])
         self._smart_annotate(
-            ax1, best_val_acc_epoch, h['val_accuracy'][best_val_acc_epoch - 1],
-            f'max: {h["val_accuracy"][best_val_acc_epoch-1]:.4f}',
+            ax1, self.best_val_acc_epoch, history['val_accuracy'][self.best_val_acc_epoch - 1],
+            f'max: {history["val_accuracy"][self.best_val_acc_epoch-1]:.4f}',
             COLOR_VAL, x_range=max(epochs),
             offset_right=(8, -14), offset_left=(-8, -14)
         )
@@ -252,26 +266,26 @@ class TrainingHandler(BaseHandler):
         ax1.grid(axis='both', alpha=0.3)
 
         # Loss Plot
-        final_train_loss = h['loss'][-1]
-        final_val_loss   = h['val_loss'][-1]
+        final_train_loss = history['loss'][-1]
+        final_val_loss   = history['val_loss'][-1]
 
-        ax2.plot(epochs, h['loss'],     label='Train', linewidth=2, color=COLOR_TRAIN)
-        ax2.plot(epochs, h['val_loss'], label='Val',   linewidth=2, color=COLOR_VAL)
-        ax2.axvline(x=best_epoch, color=COLOR_VAL, linestyle=':', label='Min val loss')
+        ax2.plot(epochs, history['loss'],     label='Train', linewidth=2, color=COLOR_TRAIN)
+        ax2.plot(epochs, history['val_loss'], label='Val',   linewidth=2, color=COLOR_VAL)
+        ax2.axvline(x=self.best_epoch, color=COLOR_VAL, linestyle=':', label='Min val loss')
         ax2.set_xlim(1, max(epochs))
-        ax2.set_ylim(0, max(max(h['loss']), max(h['val_loss'])) * 1.1)
+        ax2.set_ylim(0, max(max(history['loss']), max(history['val_loss'])) * 1.1)
         ax2.set_xlabel('Epoch')
         ax2.set_ylabel('Loss')
         ax2.set_title(
             'Training & Validation Loss\n'
             f'Final Train: {final_train_loss:.4f}  |  Final Val: {final_val_loss:.4f}'
         )
-        ticks = sorted(set([int(t) for t in ax2.get_xticks() if 1 <= t <= max(epochs)] + [best_epoch]))
+        ticks = sorted(set([int(t) for t in ax2.get_xticks() if 1 <= t <= max(epochs)] + [self.best_epoch]))
         ax2.set_xticks(ticks)
-        ax2.set_xticklabels([f'*{t}' if t == best_epoch else str(t) for t in ticks])
+        ax2.set_xticklabels([f'*{t}' if t == self.best_epoch else str(t) for t in ticks])
         self._smart_annotate(
-            ax2, best_epoch, h['val_loss'][best_epoch - 1],
-            f'min: {h["val_loss"][best_epoch-1]:.4f}',
+            ax2, self.best_epoch, history['val_loss'][self.best_epoch - 1],
+            f'min: {history["val_loss"][self.best_epoch-1]:.4f}',
             COLOR_VAL, x_range=max(epochs),
             offset_right=(8, 8), offset_left=(-8, 8)
         )
@@ -319,21 +333,12 @@ class TrainingHandler(BaseHandler):
         if not self._guard(self.history is not None, "No training history. Call train() first."):
             return
 
-        h = self.history.history
-
-        train_acc  = h.get('accuracy', h.get('acc', []))
-        val_acc    = h.get('val_accuracy', h.get('val_acc', []))
-        train_loss = h.get('loss', [])
-        val_loss   = h.get('val_loss', [])
-
-        if not train_acc or not val_acc:
-            print("Accuracy keys not found in history.")
+        if self.acc_gap is None or self.loss_gap is None:
+            print("Gap metrics not found. Should exist in history.")
             return
 
-        epochs        = range(1, len(train_acc) + 1)
-        self.acc_gap  = np.array(train_acc) - np.array(val_acc)
-        self.loss_gap = np.array(val_loss)  - np.array(train_loss)
-        best_epoch    = int(np.argmin(val_loss)) + 1
+        epochs     = range(1, self.epochs_run + 1)
+        best_epoch = self.best_epoch
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 

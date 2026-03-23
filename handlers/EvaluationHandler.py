@@ -15,7 +15,7 @@ from scipy.stats import pearsonr
 from sklearn.manifold import TSNE
 from sklearn.metrics import (
     classification_report, confusion_matrix,
-    roc_curve, auc, roc_auc_score
+    roc_curve, auc, roc_auc_score, brier_score_loss
 )
 from sklearn.preprocessing import label_binarize
 
@@ -25,7 +25,6 @@ from .DataAugmentationHandler import DataAugmentationHandler
 
 
 class EvaluationHandler(BaseHandler):
-    """Handles model evaluation, metrics computation and performance visualization."""
 
     def __init__(self,
                  config: dict,
@@ -40,13 +39,13 @@ class EvaluationHandler(BaseHandler):
         self.dataset_handler           = dataset_handler
         super().__init__(visualizations_directory)
 
-        self.report: Optional[dict] = None
+        self.report: Optional[dict]          = None
         self.confusion_matrix: Optional[np.ndarray] = None
-        self.per_class_acc: Optional[np.ndarray] = None
-        self.test_loss: Optional[float] = None
-        self.test_accuracy: Optional[float] = None
-        self.y_true: Optional[np.ndarray] = None
-        self.y_pred: Optional[np.ndarray] = None
+        self.per_class_acc: Optional[np.ndarray]    = None
+        self.test_loss: Optional[float]      = None
+        self.test_accuracy: Optional[float]  = None
+        self.y_true: Optional[np.ndarray]    = None
+        self.y_pred: Optional[np.ndarray]    = None
         self.y_pred_proba: Optional[np.ndarray] = None
 
         self.epoch_class_f1: Optional[List[Dict[str, float]]] = epoch_class_f1
@@ -108,7 +107,37 @@ class EvaluationHandler(BaseHandler):
 
         return images
 
-    # ── evaluation ──────────────────────────────────────────
+    def _compute_ece(self, n_bins: int = 15) -> float:
+        conf    = np.max(self.y_pred_proba, axis=1)
+        correct = (self.y_pred == self.y_true).astype(float)
+        ece     = 0.0
+        for b in range(n_bins):
+            lo, hi = b / n_bins, (b + 1) / n_bins
+            mask   = (conf >= lo) & (conf < hi)
+            if mask.any():
+                ece += mask.sum() / len(conf) * abs(correct[mask].mean() - conf[mask].mean())
+        return float(ece)
+
+    def _compute_brier_score(self) -> float:
+        y_bin = label_binarize(self.y_true, classes=range(self.dataset_handler.class_num))
+        return float(np.mean([
+            brier_score_loss(y_bin[:, i], self.y_pred_proba[:, i])
+            for i in range(self.dataset_handler.class_num)
+        ]))
+
+    def _compute_confidence_stats(self) -> dict:
+        conf    = np.max(self.y_pred_proba, axis=1)
+        correct = (self.y_pred == self.y_true)
+        return {
+            'mean_overall':   float(conf.mean()),
+            'mean_correct':   float(conf[correct].mean())   if correct.any()   else None,
+            'mean_incorrect': float(conf[~correct].mean())  if (~correct).any() else None,
+            'mean_per_class': {
+                self.dataset_handler.class_labels[i]: float(np.mean(conf[self.y_true == i]))
+                if np.any(self.y_true == i) else None
+                for i in range(self.dataset_handler.class_num)
+            },
+        }
 
     def evaluate(self, split: str) -> Tuple[float, float]:
         """Evaluate model on val or test split and return (loss, accuracy)."""
@@ -289,7 +318,6 @@ class EvaluationHandler(BaseHandler):
         for i, v in enumerate(sorted_f1):
             ax.text(v + 0.02, i, f'{v:.3f}', va='center', fontsize=9)
 
-        from matplotlib.patches import Patch
         legend_elements = [
             Patch(facecolor='#e74c3c', alpha=0.8, label='F1 < 0.5'),
             Patch(facecolor='#f39c12', alpha=0.8, label='0.5 <= F1 < 0.7'),
@@ -340,7 +368,6 @@ class EvaluationHandler(BaseHandler):
         ax.set_ylim(0, 1.1)
         ax.grid(axis='y', alpha=0.3)
 
-        
         legend_elements = [
             Patch(facecolor='#e74c3c', alpha=0.8, label='Accuracy < 0.5'),
             Patch(facecolor='#f39c12', alpha=0.8, label='0.5 <= Accuracy < 0.7'),
@@ -377,11 +404,9 @@ class EvaluationHandler(BaseHandler):
 
         for i, label in enumerate(self.dataset_handler.class_labels):
             x, y = recall[i], precision[i]
-
             x_offset = 10 if x < 0.85 else -10
             y_offset = 10 if y < 0.85 else -10
             ha = 'left' if x < 0.85 else 'right'
-
             ax.annotate(
                 label,
                 xy=(x, y),
@@ -680,10 +705,7 @@ class EvaluationHandler(BaseHandler):
         self._save_fig('top_misclassified.png')
 
     def plot_emotion_confusion_heatmap(self, figsize: Tuple[int, int] = (10, 7)) -> None:
-        """
-        Off-diagonal confusion heatmap showing only misclassification rates.
-        Diagonal is zeroed out to highlight confused emotion pairs (e.g. Fear vs Surprise).
-        """
+        """Off-diagonal confusion heatmap showing only misclassification rates."""
         if not self._guard(self.y_true is not None and self.y_pred is not None,
                        "No predictions available. Call predict() first."):
             return
@@ -691,14 +713,6 @@ class EvaluationHandler(BaseHandler):
         cm     = confusion_matrix(self.y_true, self.y_pred)
         cm_off = cm.astype('float') / cm.sum(axis=1, keepdims=True) * 100
         np.fill_diagonal(cm_off, 0)
-
-        pairs = []
-        for i in range(cm_off.shape[0]):
-            for j in range(cm_off.shape[1]):
-                if i != j and cm_off[i, j] > 0:
-                    pairs.append((cm_off[i, j], i, j))
-        pairs.sort(reverse=True)
-        top3 = pairs[:3]
 
         fig, ax = plt.subplots(figsize=figsize)
         mask = cm_off == 0
@@ -726,9 +740,9 @@ class EvaluationHandler(BaseHandler):
                                figsize: Optional[Tuple[int, int]] = None) -> None:
         """
         Grad-CAM visualization grid.
-        mode='both'          – left half misclassified, right half correct
-        mode='misclassified' – most confidently misclassified samples only
-        mode='correct'       – most confidently correct samples only
+        - mode='both'          - left half misclassified, right half correct
+        - mode='misclassified' - most confidently misclassified samples only
+        - mode='correct'       - most confidently correct samples only
         Each cell shows original image + Grad-CAM overlay side by side.
         """
         if not self._guard(self.y_true is not None and self.y_pred_proba is not None,
@@ -1068,7 +1082,6 @@ class EvaluationHandler(BaseHandler):
                              perplexity: int) -> None:
         """
         t-SNE visualization of model's learned feature space.
-        Works for both subclassed and functional/pretrained models.
         """
         generator_map = {
             'val':  self.data_augmentation_handler.val_generator,
@@ -1094,10 +1107,10 @@ class EvaluationHandler(BaseHandler):
 
         if layer_name is None:
             preferred = [
-                'global_average_pooling2d',   # SimpleCNN, MobileNetV2
-                'avg_pool',                   # ResNet50
-                'top_activation',             # EfficientNetB0
-                'flatten',                    # VGG16
+                'global_average_pooling2d',
+                'avg_pool',
+                'top_activation',
+                'flatten',
                 'global_avg_pool',
             ]
             for name in preferred:
@@ -1220,6 +1233,158 @@ class EvaluationHandler(BaseHandler):
 
         self._save_fig(f'tsne_embeddings_{split}.png')
 
+    def plot_calibration_curve(self, n_bins: int = 15, figsize: Tuple[int, int] = (8, 7)) -> None:
+        if not self._guard(self.y_pred_proba is not None,
+                           "No predictions available. Call predict() first."):
+            return
+
+        conf    = np.max(self.y_pred_proba, axis=1)
+        correct = (self.y_pred == self.y_true).astype(float)
+
+        bin_edges   = np.linspace(0, 1, n_bins + 1)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        bin_acc     = []
+        bin_conf    = []
+        bin_counts  = []
+
+        for lo, hi in zip(bin_edges[:-1], bin_edges[1:]):
+            mask = (conf >= lo) & (conf < hi)
+            if mask.sum() > 0:
+                bin_acc.append(correct[mask].mean())
+                bin_conf.append(conf[mask].mean())
+                bin_counts.append(mask.sum())
+            else:
+                bin_acc.append(np.nan)
+                bin_conf.append(bin_centers[len(bin_acc) - 1])
+                bin_counts.append(0)
+
+        bin_acc    = np.array(bin_acc)
+        bin_conf   = np.array(bin_conf)
+        bin_counts = np.array(bin_counts)
+        ece        = self._compute_ece(n_bins=n_bins)
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize,
+                                        gridspec_kw={'width_ratios': [3, 1]})
+
+        ax1.plot([0, 1], [0, 1], 'k--', linewidth=1.2, alpha=0.5, label='Perfect calibration')
+
+        valid = ~np.isnan(bin_acc)
+        gap   = bin_conf[valid] - bin_acc[valid]
+        colors_bar = ['#e74c3c' if g > 0 else '#2ecc71' for g in gap]
+
+        ax1.bar(bin_conf[valid], bin_acc[valid],
+                width=(bin_edges[1] - bin_edges[0]) * 0.85,
+                color='#3498db', alpha=0.55, label='Actual accuracy', zorder=2)
+        ax1.bar(bin_conf[valid], gap,
+                bottom=bin_acc[valid],
+                width=(bin_edges[1] - bin_edges[0]) * 0.85,
+                color=colors_bar, alpha=0.4, label='Gap', zorder=3)
+        ax1.plot(bin_conf[valid], bin_acc[valid], 'o-',
+                 color='#2980b9', linewidth=1.8, markersize=5, zorder=4)
+
+        ax1.set_xlabel('Mean Confidence')
+        ax1.set_ylabel('Fraction Correct')
+        ax1.set_xlim(0, 1)
+        ax1.set_ylim(0, 1)
+        ax1.set_title(f'Reliability Diagram\nECE = {ece:.4f}')
+        ax1.legend(loc='upper left', fontsize=9)
+        ax1.grid(axis='both', alpha=0.3)
+
+        ax2.bar(bin_centers, bin_counts,
+                width=(bin_edges[1] - bin_edges[0]) * 0.85,
+                color='#95a5a6', alpha=0.8)
+        ax2.set_xlabel('Confidence')
+        ax2.set_ylabel('Sample count')
+        ax2.set_xlim(0, 1)
+        ax2.set_title('Confidence\nHistogram')
+        ax2.grid(axis='y', alpha=0.3)
+
+        plt.suptitle(
+            f'Calibration Curve | {self.config["dataset"]} | {self.config["model"]}',
+            fontweight='bold'
+        )
+        plt.tight_layout()
+        self._save_fig('calibration_curve.png')
+
+    def plot_confidence_per_class(self, figsize: Tuple[int, int] = (12, 6)) -> None:
+        if not self._guard(self.y_pred_proba is not None,
+                           "No predictions available. Call predict() first."):
+            return
+
+        confidence = np.max(self.y_pred_proba, axis=1)
+        labels     = self.dataset_handler.class_labels
+        n_classes  = self.dataset_handler.class_num
+
+        mean_correct   = []
+        mean_incorrect = []
+        counts_correct = []
+        counts_wrong   = []
+
+        for i in range(n_classes):
+            mask_class   = (self.y_true == i)
+            correct_mask = mask_class & (self.y_pred == self.y_true)
+            wrong_mask   = mask_class & (self.y_pred != self.y_true)
+
+            mean_correct.append(float(confidence[correct_mask].mean())   if correct_mask.any()   else 0.0)
+            mean_incorrect.append(float(confidence[wrong_mask].mean())   if wrong_mask.any()     else 0.0)
+            counts_correct.append(int(correct_mask.sum()))
+            counts_wrong.append(int(wrong_mask.sum()))
+
+        x     = np.arange(n_classes)
+        width = 0.38
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize,
+                                        gridspec_kw={'height_ratios': [3, 1]})
+
+        bars_c = ax1.bar(x - width / 2, mean_correct,   width, label='Correct',
+                         color='#2ecc71', alpha=0.85, edgecolor='white')
+        bars_w = ax1.bar(x + width / 2, mean_incorrect, width, label='Incorrect',
+                         color='#e74c3c', alpha=0.85, edgecolor='white')
+
+        for bar, val in zip(bars_c, mean_correct):
+            if val > 0:
+                ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.008,
+                         f'{val:.2f}', ha='center', va='bottom', fontsize=8, color='#27ae60')
+        for bar, val in zip(bars_w, mean_incorrect):
+            if val > 0:
+                ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.008,
+                         f'{val:.2f}', ha='center', va='bottom', fontsize=8, color='#c0392b')
+
+        for i in range(n_classes):
+            gap = mean_correct[i] - mean_incorrect[i]
+            if mean_incorrect[i] > 0 and abs(gap) > 0.01:
+                ax1.annotate(
+                    '', xy=(x[i] + width / 2, mean_incorrect[i]),
+                    xytext=(x[i] - width / 2, mean_correct[i]),
+                    arrowprops=dict(arrowstyle='->', color='gray', lw=1.0),
+                )
+
+        overall_correct   = float(confidence[self.y_pred == self.y_true].mean())
+        overall_incorrect = float(confidence[self.y_pred != self.y_true].mean())
+        ax1.axhline(overall_correct,   color='#27ae60', linestyle='--', linewidth=1.2, alpha=0.6)
+        ax1.axhline(overall_incorrect, color='#c0392b', linestyle='--', linewidth=1.2, alpha=0.6)
+
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(labels, rotation=30, ha='right')
+        ax1.set_ylabel('Mean Confidence')
+        ax1.set_ylim(0, 1.12)
+        ax1.legend(loc='upper right')
+        ax1.grid(axis='y', alpha=0.3)
+
+        ax2.bar(x - width / 2, counts_correct, width, color='#2ecc71', alpha=0.7, label='Correct')
+        ax2.bar(x + width / 2, counts_wrong,   width, color='#e74c3c', alpha=0.7, label='Incorrect')
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(labels, rotation=30, ha='right')
+        ax2.set_ylabel('Sample count')
+        ax2.grid(axis='y', alpha=0.3)
+
+        plt.suptitle(
+            f'Confidence per Class | {self.config["dataset"]} | {self.config["model"]}',
+            fontweight='bold'
+        )
+        plt.tight_layout()
+        self._save_fig('confidence_per_class.png')
+
     # ── summary ──────────────────────────────────────────────
 
     def generate_summary(self, mode: str) -> None:
@@ -1235,6 +1400,10 @@ class EvaluationHandler(BaseHandler):
         best_class    = self.dataset_handler.class_labels[int(np.argmax(per_class_acc))]
         worst_class   = self.dataset_handler.class_labels[int(np.argmin(per_class_acc))]
 
+        ece    = self._compute_ece()
+        brier  = self._compute_brier_score()
+        conf   = self._compute_confidence_stats()
+
         summary_data = [
             ('Model',                    self.config['model']),
             ('Strategy',                 self.config['strategy']),
@@ -1247,6 +1416,11 @@ class EvaluationHandler(BaseHandler):
             ('Precision weighted',       f"{weighted.get('precision', 0):.4f}"),
             ('Recall weighted',          f"{weighted.get('recall', 0):.4f}"),
             ('Macro AUC',                f"{roc_auc_score(label_binarize(self.y_true, classes=range(self.dataset_handler.class_num)), self.y_pred_proba, average='macro'):.4f}"),
+            None,
+            ('ECE',                      f"{ece:.4f}"),
+            ('Brier score',              f"{brier:.4f}"),
+            ('Confidence (correct)',     f"{conf['mean_correct']:.4f}"   if conf['mean_correct']   is not None else 'n/a'),
+            ('Confidence (incorrect)',   f"{conf['mean_incorrect']:.4f}" if conf['mean_incorrect'] is not None else 'n/a'),
             None,
             ('Best class',               f"{best_class} ({per_class_acc.max():.4f})"),
             ('Worst class',              f"{worst_class} ({per_class_acc.min():.4f})"),

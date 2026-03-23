@@ -144,10 +144,7 @@ class TrainExperimentOrchestrator:
         Build and return an ExperimentMetrics instance from all registered handlers.
         """
         self.metrics = ExperimentMetrics(
-            experiment_id=self.experiment_name,
-            model=self.config['model'],
-            dataset=self.config['dataset'],
-            strategy=self.config['strategy'],
+            experiment_name=self.experiment_name,
         )
 
         if self._training_handler is not None:

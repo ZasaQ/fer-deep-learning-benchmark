@@ -1353,8 +1353,19 @@ class EvaluationHandler(EvaluationMetricsMixin, BaseHandler):
 
         overall_correct   = float(confidence[self.y_pred == self.y_true].mean())
         overall_incorrect = float(confidence[self.y_pred != self.y_true].mean())
-        ax1.axhline(overall_correct,   color='#27ae60', linestyle='--', linewidth=1.2, alpha=0.6)
-        ax1.axhline(overall_incorrect, color='#c0392b', linestyle='--', linewidth=1.2, alpha=0.6)
+
+        ax1.axhline(overall_correct,   color='#27ae60', linestyle='--', linewidth=1.2, alpha=0.6,
+                    label='Overall correct')
+        ax1.axhline(overall_incorrect, color='#c0392b', linestyle='--', linewidth=1.2, alpha=0.6,
+                    label='Overall incorrect')
+
+        offset_incorrect = -0.03 if abs(overall_correct - overall_incorrect) < 0.05 else 0.01
+        ax1.text(n_classes - 0.5, overall_correct + 0.01,
+                f'Overall correct: {overall_correct:.3f}',
+                color='#27ae60', fontsize=8, fontweight='bold', ha='right', va='bottom')
+        ax1.text(n_classes - 0.5, overall_incorrect + offset_incorrect,
+                f'Overall incorrect: {overall_incorrect:.3f}',
+                color='#c0392b', fontsize=8, fontweight='bold', ha='right', va='bottom')
 
         ax1.set_xticks(x)
         ax1.set_xticklabels(labels, rotation=30, ha='right')

@@ -886,7 +886,7 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         if not self._guard(has_f1,
                            'No per-class F1 found. Call benchmark_all() first.'):
             return
-
+ 
         has_keras_f1 = (
             self.keras_model is not None
             and self.evaluation_handler is not None
@@ -895,75 +895,77 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         if not has_keras_f1:
             print('No Keras per-class F1 available. Call evaluation_handler.predict() first.')
             return
-
-        report         = self.evaluation_handler.report
-        keras_f1       = {
+ 
+        report   = self.evaluation_handler.report
+        keras_f1 = {
             label: report[label]['f1-score']
             for label in self.class_labels
             if label in report
         }
-        tflite_types   = [mt for mt in self.benchmark_results
-                          if 'per_class_f1' in self.benchmark_results[mt]]
-        n_variants     = len(tflite_types)
-
+        tflite_types = [mt for mt in self.benchmark_results
+                        if 'per_class_f1' in self.benchmark_results[mt]]
+        n_variants   = len(tflite_types)
+ 
         if n_variants == 0:
             print('No TFLite variants with per_class_f1.')
             return
-
-        keras_arr = np.array([keras_f1.get(l, np.nan) for l in self.class_labels])
-
+ 
+        keras_arr      = np.array([keras_f1.get(l, np.nan) for l in self.class_labels])
         delta_matrices = {}
         for mt in tflite_types:
-            tflite_f1 = self.benchmark_results[mt]['per_class_f1']
+            tflite_f1  = self.benchmark_results[mt]['per_class_f1']
             tflite_arr = np.array([tflite_f1.get(l, np.nan) for l in self.class_labels])
             delta_matrices[mt] = tflite_arr - keras_arr
-
-        abs_max = max(
-            np.nanmax(np.abs(dm)) for dm in delta_matrices.values()
-        )
+ 
+        abs_max = max(np.nanmax(np.abs(dm)) for dm in delta_matrices.values())
         abs_max = max(abs_max, 0.01)
-
+ 
         fig, axes = plt.subplots(1, n_variants, figsize=figsize, sharey=True)
         if n_variants == 1:
             axes = [axes]
-
-        fig.suptitle(
-            'Per-Class F1 Delta',
-            fontsize=12, fontweight='bold',
-        )
-
+ 
+        fig.suptitle('Per-Class F1 Delta', fontsize=12, fontweight='bold')
+ 
         for ax, mt in zip(axes, tflite_types):
             delta  = delta_matrices[mt]
             x      = np.arange(len(self.class_labels))
             colors = ['#e74c3c' if d < 0 else '#2ecc71' for d in delta]
-
+ 
             bars = ax.barh(x, delta, color=colors, alpha=0.82, edgecolor='white')
             ax.axvline(0, color='black', linewidth=1.0, alpha=0.6)
-
-            for bar, val, label in zip(bars, delta, self.class_labels):
-                if not np.isnan(val):
-                    ha  = 'left' if val >= 0 else 'right'
-                    xpos = val + (abs_max * 0.02 if val >= 0 else -abs_max * 0.02)
-                    ax.text(xpos, bar.get_y() + bar.get_height() / 2,
-                            f'{val:+.3f}', va='center', ha=ha, fontsize=8)
-
-            for i, (label, kf1) in enumerate(zip(self.class_labels, keras_arr)):
-                ax.text(-abs_max * 1.05, i,
-                        f'({kf1:.2f})', va='center', ha='right',
-                        fontsize=7, color='#555555')
-
+ 
+            for bar, val in zip(bars, delta):
+                if np.isnan(val):
+                    continue
+                if val >= 0:
+                    ax.text(val + abs_max * 0.03, bar.get_y() + bar.get_height() / 2,
+                            f'{val:+.3f}', va='center', ha='left', fontsize=8)
+                else:
+                    ax.text(val - abs_max * 0.03, bar.get_y() + bar.get_height() / 2,
+                            f'{val:+.3f}', va='center', ha='right', fontsize=8)
+ 
             ax.set_yticks(x)
             ax.set_yticklabels(self.class_labels, fontsize=9)
-            ax.set_xlim(-abs_max * 1.4, abs_max * 1.4)
+            ax.set_xlim(-abs_max * 1.35, abs_max * 1.35)
             ax.set_xlabel('Delta F1 Score')
             ax.set_title(self._LABEL_MAP.get(mt, mt), fontsize=11)
             ax.grid(axis='x', alpha=0.3)
-
-        if n_variants > 1:
-            axes[0].text(-abs_max * 1.05, -0.7,
-                         'Keras', va='top', ha='right',
-                         fontsize=7, color='#555555', style='italic')
-
+ 
+            keras_lines = '\n'.join(
+                f'{l}: {keras_f1.get(l, float("nan")):.2f}'
+                for l in self.class_labels
+            )
+            ax.annotate(
+                f'Keras F1\n{keras_lines}',
+                xy=(0.98, 0.02),
+                xycoords='axes fraction',
+                ha='right', va='bottom',
+                fontsize=7,
+                color='#555555',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                          edgecolor='lightgray', alpha=0.85),
+            )
+ 
         plt.tight_layout()
         self._save_fig('per_class_f1_delta.png')
 

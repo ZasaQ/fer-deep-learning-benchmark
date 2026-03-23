@@ -145,6 +145,9 @@ class TrainExperimentOrchestrator:
         """
         self.metrics = ExperimentMetrics(
             experiment_name=self.experiment_name,
+            model=self.model_name,
+            dataset=self.config.get('dataset'),
+            strategy=self.config.get('strategy'),
         )
 
         if self._training_handler is not None:
@@ -215,30 +218,6 @@ class TrainExperimentOrchestrator:
         print(f"Config saved to:  {path}")
         return path
 
-    def save_benchmark_results(self) -> str:
-        """Save raw TFLite benchmark_results dict as JSON. Requires register_tflite()."""
-        if self._tflite_handler is None:
-            print("No TFLiteHandler registered (skipping benchmark results).")
-            return ''
-
-        if not self._tflite_handler.benchmark_results:
-            print("No benchmark results available (skipping).")
-            return ''
-
-        serializable = {}
-        for model_type, results in self._tflite_handler.benchmark_results.items():
-            serializable[model_type] = {
-                k: (v.tolist() if isinstance(v, np.ndarray) else v)
-                for k, v in results.items()
-                if k != 'raw_inference_times_ms'
-            }
-
-        path = os.path.join(self.archive_directory, 'benchmark_results.json')
-        with open(path, 'w') as f:
-            json.dump(serializable, f, indent=2)
-        print(f"Benchmark results saved to: {path}")
-        return path
-
     def save_latex_summaries(self) -> None:
         """Save LaTeX summary .tex files for all registered handlers."""
         print("\nSaving LaTeX summaries...")
@@ -281,8 +260,7 @@ class TrainExperimentOrchestrator:
         self.save_config()
         self.save_history()
         self.save_predictions()
-        self.save_benchmark_results()
-        self.save_metrics_json()       # builds ExperimentMetrics and saves metrics.json
+        self.save_metrics_json()
         self.save_latex_summaries()
 
         print("=" * 60)

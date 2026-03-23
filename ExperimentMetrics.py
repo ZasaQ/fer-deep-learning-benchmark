@@ -203,6 +203,9 @@ class ExperimentMetrics:
 
     # ── identification ────────────────────────────────────────────────────────
     experiment_name: Optional[str]   = None
+    model:      Optional[str]   = None
+    dataset:    Optional[str]   = None
+    strategy:   Optional[str]   = None
     timestamp_start: Optional[str]   = None
     timestamp_stop:  Optional[str]   = None
     elapsed_seconds: Optional[float] = None

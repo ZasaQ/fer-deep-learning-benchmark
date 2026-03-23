@@ -969,6 +969,8 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         plt.tight_layout()
         self._save_fig('per_class_f1_delta.png')
 
+    # ── summary ──────────────────────────────────────
+
     def generate_summary(self, mode: str) -> None:
         summary_data = [
             ('Model',    self.config.get('model', 'Unknown')),

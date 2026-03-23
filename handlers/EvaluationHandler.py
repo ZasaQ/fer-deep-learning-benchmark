@@ -1309,7 +1309,7 @@ class EvaluationHandler(EvaluationMetricsMixin, BaseHandler):
 
     def plot_confidence_per_class(self, figsize: Tuple[int, int] = (12, 6)) -> None:
         if not self._guard(self.y_pred_proba is not None,
-                           "No predictions available. Call predict() first."):
+                        "No predictions available. Call predict() first."):
             return
 
         confidence = np.max(self.y_pred_proba, axis=1)
@@ -1338,27 +1338,18 @@ class EvaluationHandler(EvaluationMetricsMixin, BaseHandler):
                                         gridspec_kw={'height_ratios': [3, 1]})
 
         bars_c = ax1.bar(x - width / 2, mean_correct,   width, label='Correct',
-                         color='#2ecc71', alpha=0.85, edgecolor='white')
+                        color='#2ecc71', alpha=0.85, edgecolor='white')
         bars_w = ax1.bar(x + width / 2, mean_incorrect, width, label='Incorrect',
-                         color='#e74c3c', alpha=0.85, edgecolor='white')
+                        color='#e74c3c', alpha=0.85, edgecolor='white')
 
         for bar, val in zip(bars_c, mean_correct):
             if val > 0:
                 ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.008,
-                         f'{val:.2f}', ha='center', va='bottom', fontsize=8, color='#27ae60')
+                        f'{val:.2f}', ha='center', va='bottom', fontsize=8, color='#27ae60')
         for bar, val in zip(bars_w, mean_incorrect):
             if val > 0:
                 ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.008,
-                         f'{val:.2f}', ha='center', va='bottom', fontsize=8, color='#c0392b')
-
-        for i in range(n_classes):
-            gap = mean_correct[i] - mean_incorrect[i]
-            if mean_incorrect[i] > 0 and abs(gap) > 0.01:
-                ax1.annotate(
-                    '', xy=(x[i] + width / 2, mean_incorrect[i]),
-                    xytext=(x[i] - width / 2, mean_correct[i]),
-                    arrowprops=dict(arrowstyle='->', color='gray', lw=1.0),
-                )
+                        f'{val:.2f}', ha='center', va='bottom', fontsize=8, color='#c0392b')
 
         overall_correct   = float(confidence[self.y_pred == self.y_true].mean())
         overall_incorrect = float(confidence[self.y_pred != self.y_true].mean())
@@ -1368,21 +1359,31 @@ class EvaluationHandler(EvaluationMetricsMixin, BaseHandler):
         ax1.set_xticks(x)
         ax1.set_xticklabels(labels, rotation=30, ha='right')
         ax1.set_ylabel('Mean Confidence')
-        ax1.set_ylim(0, 1.12)
+        ax1.set_ylim(0, 1.18)
         ax1.legend(loc='upper right')
         ax1.grid(axis='y', alpha=0.3)
 
-        ax2.bar(x - width / 2, counts_correct, width, color='#2ecc71', alpha=0.7, label='Correct')
-        ax2.bar(x + width / 2, counts_wrong,   width, color='#e74c3c', alpha=0.7, label='Incorrect')
+        bars2_c = ax2.bar(x - width / 2, counts_correct, width, color='#2ecc71', alpha=0.7)
+        bars2_w = ax2.bar(x + width / 2, counts_wrong,   width, color='#e74c3c', alpha=0.7)
+
+        for bar, val in zip(bars2_c, counts_correct):
+            if val > 0:
+                ax2.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                        str(val), ha='center', va='bottom', fontsize=7, color='#27ae60')
+        for bar, val in zip(bars2_w, counts_wrong):
+            if val > 0:
+                ax2.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                        str(val), ha='center', va='bottom', fontsize=7, color='#c0392b')
+
+        max_count = max(max(counts_correct), max(counts_wrong))
+        ax2.set_ylim(0, max_count * 1.20)
+
         ax2.set_xticks(x)
         ax2.set_xticklabels(labels, rotation=30, ha='right')
         ax2.set_ylabel('Sample count')
         ax2.grid(axis='y', alpha=0.3)
 
-        plt.suptitle(
-            f'Confidence per Class | {self.config["dataset"]} | {self.config["model"]}',
-            fontweight='bold'
-        )
+        plt.suptitle('Confidence per Class', fontweight='bold')
         plt.tight_layout()
         self._save_fig('confidence_per_class.png')
 

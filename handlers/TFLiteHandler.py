@@ -6,8 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.metrics import (
-    accuracy_score, f1_score, precision_score, recall_score,
-    confusion_matrix as sk_cm,
+    accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
 )
 
 from .BaseHandler import BaseHandler
@@ -434,7 +433,7 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
             'per_class_f1':           per_class_f1,
             'per_class_precision':    per_class_precision,
             'per_class_recall':       per_class_recall,
-            'confusion_matrix':       sk_cm(y_true, y_pred).tolist(),
+            'confusion_matrix':       confusion_matrix(y_true, y_pred).tolist(),
             'mean_inference_time_ms': float(np.mean(times)),
             'std_inference_time_ms':  float(np.std(times)),
             'p95_inference_time_ms':  float(np.percentile(times, 95)),

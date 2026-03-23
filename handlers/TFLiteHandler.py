@@ -948,8 +948,6 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
                 ]
                 ax.set_yticklabels(tick_labels, fontsize=9)
                 ax.set_ylabel('(Keras F1)', fontsize=8, color='#666666', style='italic')
-            else:
-                ax.set_yticklabels([])
 
             ax.set_xlim(-abs_max * 1.45, abs_max * 1.35)
             ax.set_xlabel('Delta F1 Score')

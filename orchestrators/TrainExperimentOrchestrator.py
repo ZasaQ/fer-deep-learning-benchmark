@@ -9,8 +9,6 @@ from typing import Optional
 
 import numpy as np
 import tensorflow as tf
-from sklearn.metrics import roc_curve, auc, roc_auc_score
-from sklearn.preprocessing import label_binarize
 
 from google.colab import files
 
@@ -24,6 +22,7 @@ from handlers import (
     TFLiteHandler,
 )
 from DirectoryManager import DirectoryManager
+from ExperimentMetrics import ExperimentMetrics
 
 
 class TrainExperimentOrchestrator:
@@ -58,6 +57,9 @@ class TrainExperimentOrchestrator:
         self._training_handler          = None
         self._evaluation_handler        = None
         self._tflite_handler            = None
+
+        # populated by build_metrics() / archive_experiment()
+        self.metrics: Optional[ExperimentMetrics] = None
 
         print('TrainExperimentOrchestrator has been initialized.')
         print(f'Experiment name: {self.experiment_name}')
@@ -135,6 +137,48 @@ class TrainExperimentOrchestrator:
             return f"{m}m {s}s"
         return f"{s}s"
 
+    # ── ExperimentMetrics ────────────────────────────────────
+
+    def build_metrics(self) -> ExperimentMetrics:
+        """
+        Build and return an ExperimentMetrics instance from all registered handlers.
+        """
+        self.metrics = ExperimentMetrics(
+            experiment_id=self.experiment_name,
+            model=self.config['model'],
+            dataset=self.config['dataset'],
+            strategy=self.config['strategy'],
+        )
+
+        if self._training_handler is not None:
+            self.metrics.update(training=self._training_handler.to_metrics_dict())
+
+        if self._evaluation_handler is not None:
+            self.metrics.update(evaluation=self._evaluation_handler.to_metrics_dict())
+
+        if self._tflite_handler is not None:
+            self.metrics.update(tflite=self._tflite_handler.to_metrics_dict())
+
+        self.metrics.timestamp_start = self.timestamp_start.strftime('%Y-%m-%d %H:%M:%S')
+        if self.timestamp_stop is not None:
+            self.metrics.timestamp_stop  = self.timestamp_stop.strftime('%Y-%m-%d %H:%M:%S')
+            self.metrics.elapsed_seconds = round(self.elapsed_seconds, 1)
+
+        print('ExperimentMetrics built.')
+        return self.metrics
+
+    def save_metrics_json(self) -> str:
+        """
+        Build ExperimentMetrics (if not already built) and save as metrics.json.
+        """
+        if self.metrics is None:
+            self.build_metrics()
+
+        path = os.path.join(self.archive_directory, 'metrics.json')
+        self.metrics.save(path)
+        print(f'Metrics saved to: {path}')
+        return path
+
     # ── saving ───────────────────────────────────────────────
 
     def save_history(self) -> str:
@@ -175,7 +219,7 @@ class TrainExperimentOrchestrator:
         return path
 
     def save_benchmark_results(self) -> str:
-        """Save TFLite benchmark results as JSON. Requires register_tflite()."""
+        """Save raw TFLite benchmark_results dict as JSON. Requires register_tflite()."""
         if self._tflite_handler is None:
             print("No TFLiteHandler registered (skipping benchmark results).")
             return ''
@@ -196,126 +240,6 @@ class TrainExperimentOrchestrator:
         with open(path, 'w') as f:
             json.dump(serializable, f, indent=2)
         print(f"Benchmark results saved to: {path}")
-        return path
-
-    def save_metrics_json(self) -> str:
-        """
-        Save a flat metrics JSON.
-        Combines evaluation metrics, training summary, TFLite benchmarks,
-        ROC AUC per class, and experiment metadata into a single file.
-        """
-        if self._evaluation_handler is None:
-            print("No EvaluationHandler registered (skipping metrics).")
-            return ''
-
-        ev = self._evaluation_handler
-
-        if ev.y_true is None or ev.y_pred is None:
-            print("No predictions available — call predict() before archiving.")
-            return ''
-
-        # classification report
-        report   = ev._get_classification_report()
-        weighted = report.get('weighted avg', {})
-        macro    = report.get('macro avg', {})
-        cm       = np.array(ev.confusion_matrix)
-        per_class_acc = cm.diagonal() / cm.sum(axis=1)
-
-        # ROC AUC per class
-        roc_auc_per_class = {}
-        macro_auc = None
-        if ev.y_pred_proba is not None:
-            try:
-                n_classes  = ev.dataset_handler.class_num
-                y_true_bin = label_binarize(ev.y_true, classes=range(n_classes))
-
-                for i, label in enumerate(ev.dataset_handler.class_labels):
-                    fpr, tpr, _ = roc_curve(y_true_bin[:, i], ev.y_pred_proba[:, i])
-                    roc_auc_per_class[label] = round(float(auc(fpr, tpr)), 6)
-
-                macro_auc = round(float(
-                    roc_auc_score(y_true_bin, ev.y_pred_proba, average='macro')
-                ), 6)
-            except Exception as e:
-                print(f"ROC AUC computation failed: {e}")
-
-        # training info
-        training_info = {}
-        if self._training_handler is not None:
-            try:
-                history  = self._training_handler.history.history
-                val_acc  = history.get('val_accuracy', history.get('val_acc', []))
-                val_loss = history.get('val_loss', [])
-                best_epoch = int(np.argmax(val_acc)) if val_acc else None
-                training_info = {
-                    'actual_epochs':     len(val_acc),
-                    'best_epoch':        (best_epoch + 1) if best_epoch is not None else None,
-                    'best_val_accuracy': round(float(max(val_acc)), 6) if val_acc else None,
-                    'best_val_loss':     round(float(val_loss[best_epoch]), 6)
-                                         if val_loss and best_epoch is not None else None,
-                    'early_stopping_triggered': (
-                        len(val_acc) < self.config.get('epochs', len(val_acc))
-                        if val_acc else None
-                    ),
-                }
-            except Exception as e:
-                training_info = {'error': str(e)}
-
-        # TFLite summary
-        tflite_info = {}
-        if self._tflite_handler is not None and self._tflite_handler.benchmark_results:
-            try:
-                for model_type, results in self._tflite_handler.benchmark_results.items():
-                    tflite_info[model_type] = {
-                        'accuracy':        round(float(results['accuracy']), 6),
-                        'size_kb':         round(float(results['model_size_kb']), 2),
-                        'mean_latency_ms': round(float(results['mean_inference_time_ms']), 4),
-                        'p95_latency_ms':  round(float(results['p95_inference_time_ms']), 4),
-                    }
-            except Exception as e:
-                tflite_info = {'error': str(e)}
-
-        metrics = {
-            'experiment_id':   self.experiment_name,
-            'model':           self.config.get('model'),
-            'dataset':         self.config.get('dataset'),
-            'strategy':        self.config.get('strategy'),
-            'timestamp_start': self.timestamp_start.strftime('%Y-%m-%d %H:%M:%S'),
-            'timestamp_stop':  self.timestamp_stop.strftime('%Y-%m-%d %H:%M:%S') if self.timestamp_stop else None,
-            'elapsed_seconds': round(self.elapsed_seconds, 1),
-
-            'accuracy':        round(float(ev.test_accuracy), 6) if ev.test_accuracy is not None else None,
-            'test_loss':       round(float(ev.test_loss), 6)     if ev.test_loss     is not None else None,
-            'f1_macro':        round(float(macro.get('f1-score', 0)), 6),
-            'f1_weighted':     round(float(weighted.get('f1-score', 0)), 6),
-            'precision_macro': round(float(macro.get('precision', 0)), 6),
-            'recall_macro':    round(float(macro.get('recall', 0)), 6),
-            'macro_auc':       macro_auc,
-
-            'per_class_f1': {
-                label: round(float(report[label]['f1-score']), 6)
-                for label in ev.dataset_handler.class_labels
-            },
-            'per_class_accuracy': {
-                label: round(float(acc), 6)
-                for label, acc in zip(ev.dataset_handler.class_labels, per_class_acc)
-            },
-            'roc_auc_per_class': roc_auc_per_class,
-
-            'confusion_matrix': cm.tolist(),
-            'class_names':      ev.dataset_handler.class_labels,
-            'n_test_samples':   int(len(ev.y_true)),
-
-            'training': training_info,
-
-            'tflite': tflite_info,
-        }
-
-        path = os.path.join(self.archive_directory, 'metrics.json')
-        with open(path, 'w') as f:
-            json.dump(metrics, f, indent=2)
-
-        print(f"Metrics saved to: {path}")
         return path
 
     def save_latex_summaries(self) -> None:
@@ -361,7 +285,7 @@ class TrainExperimentOrchestrator:
         self.save_history()
         self.save_predictions()
         self.save_benchmark_results()
-        self.save_metrics_json()
+        self.save_metrics_json()       # builds ExperimentMetrics and saves metrics.json
         self.save_latex_summaries()
 
         print("=" * 60)
@@ -381,12 +305,12 @@ class TrainExperimentOrchestrator:
         print(f"Creating zip archive of: {root}")
 
         with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for dirpath, _, files in os.walk(root):
-                for filename in files:
+            for dirpath, _, filenames in os.walk(root):
+                for filename in filenames:
                     if filename.endswith('.zip'):
                         continue
                     filepath = os.path.join(dirpath, filename)
-                    arcname = os.path.relpath(filepath, os.path.dirname(root))
+                    arcname  = os.path.relpath(filepath, os.path.dirname(root))
                     zf.write(filepath, arcname)
 
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
@@ -394,12 +318,7 @@ class TrainExperimentOrchestrator:
         return output_path
 
     def download_experiment(self) -> str:
-        """
-        Zip the entire experiment root folder and trigger a browser download (Colab).
-
-        Returns:
-            Path to the created zip file
-        """
+        """Zip the experiment folder and trigger a browser download (Colab)."""
         zip_path = self.create_zip()
 
         try:
@@ -418,8 +337,8 @@ class TrainExperimentOrchestrator:
             print("No archive directory found.")
             return
 
-        files = os.listdir(self.archive_directory)
-        if not files:
+        archive_files = os.listdir(self.archive_directory)
+        if not archive_files:
             print("Archive is empty.")
             return
 
@@ -427,8 +346,8 @@ class TrainExperimentOrchestrator:
         print("-" * 60)
 
         total_mb = 0.0
-        for f in sorted(files):
-            size = os.path.getsize(os.path.join(self.archive_directory, f))
+        for f in sorted(archive_files):
+            size    = os.path.getsize(os.path.join(self.archive_directory, f))
             size_mb = size / (1024 * 1024)
             total_mb += size_mb
             print(f"  {f:<40} {size_mb:>8.2f} MB")
@@ -455,10 +374,10 @@ class TrainExperimentOrchestrator:
                 'timestamp_stop':  self.timestamp_stop.strftime('%Y-%m-%d %H:%M:%S') if self.timestamp_stop else None,
                 'elapsed':         self._fmt_duration(self.elapsed_seconds),
             },
-            'config': {k: v for k, v in self.config.items()},
-            'training': None,
+            'config':     {k: v for k, v in self.config.items()},
+            'training':   None,
             'evaluation': None,
-            'tflite': None,
+            'tflite':     None,
         }
 
         if self._training_handler is not None:
@@ -666,9 +585,7 @@ class TrainExperimentOrchestrator:
     # ── shutdown ─────────────────────────────────────────────
 
     def shutdown(self, delay: int) -> None:
-        """
-        Clear TensorFlow session, free memory, and disconnect Colab runtime.
-        """
+        """Clear TensorFlow session, free memory, and disconnect Colab runtime."""
         print("Clearing TensorFlow session...")
         try:
             tf.keras.backend.clear_session()

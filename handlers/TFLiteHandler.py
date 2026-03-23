@@ -14,9 +14,10 @@ from .BaseHandler import BaseHandler
 from .DatasetHandler import DatasetHandler
 from .DataAugmentationHandler import DataAugmentationHandler
 from .EvaluationHandler import EvaluationHandler
+from ExperimentMetrics import TFLiteMetricsMixin
 
 
-class TFLiteHandler(BaseHandler):
+class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
     """Handles TensorFlow Lite conversion, benchmarking and mobile deployment visualization."""
 
     _COLOR_MAP = {

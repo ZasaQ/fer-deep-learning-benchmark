@@ -22,10 +22,11 @@ from sklearn.preprocessing import label_binarize
 from .BaseHandler import BaseHandler
 from .DatasetHandler import DatasetHandler
 from .DataAugmentationHandler import DataAugmentationHandler
+from ExperimentMetrics import EvaluationMetricsMixin
 
 
-class EvaluationHandler(BaseHandler):
-
+class EvaluationHandler(EvaluationMetricsMixin, BaseHandler):
+    """Handles model evaluation, prediction generation and visualizations."""
     def __init__(self,
                  config: dict,
                  model: tf.keras.Model,

@@ -9,9 +9,10 @@ from tensorflow.keras.callbacks import Callback
 
 from .BaseHandler import BaseHandler
 from .DataAugmentationHandler import DataAugmentationHandler
+from ExperimentMetrics import TrainingMetricsMixin
 
 
-class TrainingHandler(BaseHandler):
+class TrainingHandler(TrainingMetricsMixin, BaseHandler):
     """Handles model training execution and learning curve visualization."""
 
     def __init__(self,

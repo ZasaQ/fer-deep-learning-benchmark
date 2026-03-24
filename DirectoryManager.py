@@ -38,6 +38,8 @@ class DirectoryManager:
             os.makedirs(path, exist_ok=True)
             self.paths[subdir] = path
 
+        print(f'Experiment directories created: {self.root}')
+
         return self.root
 
     def create_dir(self, path: str, key: Optional[str] = None) -> str:
@@ -98,6 +100,7 @@ class DirectoryManager:
         return total / (1024 * 1024)
 
     def print_structure(self) -> None:
+        """Print a tree-like structure of the experiment directories."""
         if not self.paths:
             print('Directories not created yet.')
             return
@@ -105,20 +108,30 @@ class DirectoryManager:
         print(f'\n{self.root}/')
 
         entries = {k: v for k, v in self.paths.items() if k != 'root'}
-        keys = list(entries.keys())
 
-        for i, key in enumerate(keys):
-            path = entries[key]
-            relative = os.path.relpath(path, self.root)
-            parts = relative.split(os.sep)
-            is_last = (i == len(keys) - 1)
+        relatives = sorted(set(
+            os.path.relpath(v, self.root) for v in entries.values()
+        ))
 
-            if len(parts) == 1:
-                connector = '└' if is_last else '├'
-                print(f'   {connector}── {parts[0]}/')
-            else:
-                parent_connector = '│' if not is_last else ' '
-                print(f'   ├── {parts[0]}/')
-                print(f'   {parent_connector}   └── {parts[1]}/')
+        def print_tree(prefix: str, items: list[str]) -> None:
+            direct = {}
+            for item in items:
+                parts = item.split(os.sep)
+                top = parts[0]
+                rest = os.sep.join(parts[1:])
+                if top not in direct:
+                    direct[top] = []
+                if rest:
+                    direct[top].append(rest)
 
+            keys = list(direct.keys())
+            for i, key in enumerate(keys):
+                is_last = (i == len(keys) - 1)
+                connector = '└── ' if is_last else '├── '
+                print(f'{prefix}{connector}{key}/')
+                if direct[key]:
+                    extension = '    ' if is_last else '│   '
+                    print_tree(prefix + extension, direct[key])
+
+        print_tree('   ', relatives)
         print()

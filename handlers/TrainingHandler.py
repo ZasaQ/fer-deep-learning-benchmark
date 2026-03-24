@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from sklearn.utils.class_weight import compute_class_weight
 import tensorflow as tf
 from tensorflow.keras.callbacks import Callback
+import pickle
+import subprocess
 
 from .BaseHandler import BaseHandler
 from .DataAugmentationHandler import DataAugmentationHandler
@@ -78,7 +80,6 @@ class TrainingHandler(TrainingMetricsMixin, BaseHandler):
                     gpu_entry['compute_capability'] = 'unknown'
 
                 try:
-                    import subprocess
                     result = subprocess.run(
                         ['nvidia-smi',
                          '--query-gpu=name,memory.total,memory.free',
@@ -148,6 +149,71 @@ class TrainingHandler(TrainingMetricsMixin, BaseHandler):
         if m:
             return f"{m}m {s}s"
         return f"{s}s"
+    
+    def load_model(self, model_path: str, history_path: str) -> tf.keras.Model:
+        """Recovery alternative to train()."""
+        
+ 
+        # model
+        print(f"Loading model from:   {model_path}")
+        self.model = tf.keras.models.load_model(model_path)
+        print(f"Model loaded: {self.model.name}  |  params: {self.model.count_params():,}")
+ 
+        # history
+        print(f"Loading history from: {history_path}")
+        with open(history_path, "rb") as f:
+            raw = pickle.load(f)
+ 
+        # history.pkl is saved as a plain dict by archive_experiment()
+        history_dict = raw.history if hasattr(raw, "history") else raw
+ 
+        # Minimal wrapper so self.history.history works everywhere downstream
+        class _RestoredHistory:
+            def __init__(self, d):
+                self.history = d
+ 
+        self.history = _RestoredHistory(history_dict)
+ 
+        # restore every attribute that train() sets
+        h = history_dict
+ 
+        self.train_acc  = h.get("accuracy",    h.get("acc", []))
+        self.val_acc    = h.get("val_accuracy", h.get("val_acc", []))
+        self.train_loss = h.get("loss", [])
+        self.val_loss   = h.get("val_loss", [])
+ 
+        if self.val_acc:
+            self.best_val_acc_epoch = int(np.argmax(self.val_acc)) + 1
+            self.best_val_accuracy  = float(max(self.val_acc))
+ 
+        if self.val_loss:
+            self.best_epoch    = int(np.argmin(self.val_loss)) + 1
+            self.best_val_loss = float(min(self.val_loss))
+            self.epochs_run    = len(self.val_loss)
+            self.early_stopped = self.epochs_run < self.config["epochs"]
+ 
+        if self.train_acc and self.val_acc:
+            self.acc_gap = np.array(self.train_acc) - np.array(self.val_acc)
+ 
+        if self.train_loss and self.val_loss:
+            self.loss_gap = np.array(self.val_loss) - np.array(self.train_loss)
+ 
+        self.train_val_gap = round(float(self.acc_gap[-1]), 4) if self.acc_gap is not None else None
+ 
+        # fit timing — restored later from metrics.json by load_experiment()
+        self.fit_start   = None
+        self.fit_stop    = None
+        self.fit_elapsed = None
+ 
+        print(f"\nModel recovery complete.")
+        print(f"  Epochs run:        {self.epochs_run}/{self.config['epochs']}"
+              + (" (early stopping)" if self.early_stopped else ""))
+        print(f"  Best epoch:        {self.best_epoch}")
+        print(f"  Best val_loss:     {self.best_val_loss:.4f}")
+        print(f"  Best val_accuracy: {self.best_val_accuracy:.4f}")
+ 
+        return self.model
+
 
     # ── training ─────────────────────────────────────────────
 

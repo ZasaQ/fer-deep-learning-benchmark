@@ -12,6 +12,34 @@ class DirectoryManager:
 
         print('DirectoryManager has been initialized.')
 
+    @classmethod
+    def from_existing(cls, experiment_dir: str) -> "DirectoryManager":
+        """
+        Reconstruct a DirectoryManager from an already-created experiment folder.
+        Used in recovery mode instead of create_experiment_dirs().
+        """
+        dm                 = cls.__new__(cls)
+        dm.experiment_name = os.path.basename(experiment_dir)
+        dm.root            = experiment_dir
+        dm.paths           = {"root": experiment_dir}
+ 
+        visualizations_root = os.path.join(experiment_dir, "visualizations")
+        if os.path.isdir(visualizations_root):
+            dm.paths["visualizations"] = visualizations_root
+            for subdir in os.listdir(visualizations_root):
+                full = os.path.join(visualizations_root, subdir)
+                if os.path.isdir(full):
+                    dm.paths[subdir] = full
+ 
+        for subdir in ("logs", "archive"):
+            full = os.path.join(experiment_dir, subdir)
+            if os.path.isdir(full):
+                dm.paths[subdir] = full
+ 
+        print(f"DirectoryManager restored: {experiment_dir}")
+        print(f"  paths: {list(dm.paths.keys())}")
+        return dm
+
     # ── public ────────────────────────────────────────────────────────────────
 
     def create_experiment_dirs(

@@ -47,7 +47,9 @@ class DirectoryManager:
         os.makedirs(path, exist_ok=True)
         registered_key = key or os.path.basename(path)
         self.paths[registered_key] = path
-        print(f'  {registered_key} -> {path}')
+
+        print(f'Directory created: {registered_key} -> {path}')
+        
         return path
 
     def get(self, subdir: str) -> str:

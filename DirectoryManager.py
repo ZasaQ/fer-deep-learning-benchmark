@@ -38,7 +38,6 @@ class DirectoryManager:
             os.makedirs(path, exist_ok=True)
             self.paths[subdir] = path
 
-        self._print_structure(visualization_subdirs, other_subdirs)
         return self.root
 
     def create_dir(self, path: str, key: Optional[str] = None) -> str:
@@ -98,19 +97,28 @@ class DirectoryManager:
                 total += os.path.getsize(os.path.join(dirpath, f))
         return total / (1024 * 1024)
 
-    # ── private ───────────────────────────────────────────────────────────────
+    def print_structure(self) -> None:
+        if not self.paths:
+            print('Directories not created yet.')
+            return
 
-    def _print_structure(
-        self,
-        visualization_subdirs: list[str],
-        other_subdirs: list[str],
-    ) -> None:
         print(f'\n{self.root}/')
-        print(f'   ├── visualizations/')
-        for i, subdir in enumerate(visualization_subdirs):
-            connector = '└' if i == len(visualization_subdirs) - 1 else '├'
-            print(f'   │   {connector}── {subdir}/')
-        for i, subdir in enumerate(other_subdirs):
-            connector = '└' if i == len(other_subdirs) - 1 else '├'
-            print(f'   {connector}── {subdir}/')
+
+        entries = {k: v for k, v in self.paths.items() if k != 'root'}
+        keys = list(entries.keys())
+
+        for i, key in enumerate(keys):
+            path = entries[key]
+            relative = os.path.relpath(path, self.root)
+            parts = relative.split(os.sep)
+            is_last = (i == len(keys) - 1)
+
+            if len(parts) == 1:
+                connector = '└' if is_last else '├'
+                print(f'   {connector}── {parts[0]}/')
+            else:
+                parent_connector = '│' if not is_last else ' '
+                print(f'   ├── {parts[0]}/')
+                print(f'   {parent_connector}   └── {parts[1]}/')
+
         print()

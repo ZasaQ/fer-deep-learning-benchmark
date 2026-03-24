@@ -9,6 +9,7 @@ from typing import Optional
 
 import numpy as np
 import tensorflow as tf
+import pickle
 
 from google.colab import files
 
@@ -26,10 +27,7 @@ from ExperimentMetrics import ExperimentMetrics
 
 
 class TrainExperimentOrchestrator:
-    """
-    Manages experiment metadata, archiving, summary generation,
-    and experiment download.
-    """
+    """Manages experiment metadata, archiving, summary generation, and experiment download."""
 
     def __init__(self, config: dict):
         self.config = config
@@ -65,6 +63,158 @@ class TrainExperimentOrchestrator:
         print(f'Experiment name: {self.experiment_name}')
         print(f'Model name:      {self.model_name}')
         print(f'Start time:      {self.timestamp_start.strftime("%Y-%m-%d %H:%M:%S")}')
+
+    # ── class methods ─────────────────────────────────────────
+
+    @classmethod
+    def load_experiment(
+        cls,
+        experiment_dir: str,
+        config: dict,
+    ) -> tuple:
+        """Load an existing experiment from disk, reconstructing all handlers and state."""
+
+        # DirectoryManager
+        directory_manager = DirectoryManager.from_existing(experiment_dir)
+        archive_dir       = directory_manager.get("archive")
+        root_dir          = directory_manager.get("root")
+ 
+        # Locate .keras (saved by ModelCheckpoint in root/)
+        keras_files = sorted(
+            f for f in os.listdir(root_dir) if f.endswith(".keras")
+        )
+        if not keras_files:
+            # fallback: search all subdirs
+            keras_files = sorted(
+                os.path.join(dp, f)
+                for dp, _, files in os.walk(experiment_dir)
+                for f in files if f.endswith(".keras")
+            )
+        else:
+            keras_files = [os.path.join(root_dir, f) for f in keras_files]
+ 
+        if not keras_files:
+            raise FileNotFoundError(
+                f"No .keras file found in {experiment_dir}.\n"
+                "Ensure ModelCheckpoint saved the model before archiving."
+            )
+        model_path = keras_files[0]
+        print(f"Model file:   {model_path}")
+ 
+        # Locate history.pkl
+        history_path = os.path.join(archive_dir, "history.pkl")
+        if not os.path.exists(history_path):
+            raise FileNotFoundError(
+                f"history.pkl not found in {archive_dir}.\n"
+                "Cannot restore training state without it."
+            )
+ 
+        # Orchestrator
+        orch = cls(config=config)
+        orch.archive_directory = archive_dir
+ 
+        # Restore timestamps from old metrics.json
+        cls._restore_timestamps(orch, archive_dir)
+ 
+        # CallbacksHandler (lightweight — no create())
+        callbacks_handler            = CallbacksHandler(
+            config=config,
+            model_name=orch.model_name,
+            directory_manager=directory_manager,
+        )
+        callbacks_handler.model_path = model_path   # override to actual file
+ 
+        # restore epoch_class_f1 (needed by EvaluationHandler)
+        epoch_class_f1_path = os.path.join(archive_dir, "epoch_class_f1.pkl")
+        if os.path.exists(epoch_class_f1_path):
+            
+            with open(epoch_class_f1_path, "rb") as f:
+                _f1 = pickle.load(f)
+            print(f"epoch_class_f1 restored ({len(_f1)} epochs)")
+        else:
+            _f1 = []
+            print("epoch_class_f1.pkl not found — plot_per_epoch_class_f1() will be empty")
+ 
+        # attach as minimal object so callbacks_handler.per_class_f1_callback.epoch_class_f1 works
+        callbacks_handler.per_class_f1_callback = type(
+            "_RestoredF1", (), {"epoch_class_f1": _f1}
+        )()
+ 
+        orch.register_callbacks(callbacks_handler)
+ 
+        # ModelHandler (no build — overwritten below)
+        model_handler = ModelHandler(config=config, dataset_handler=None)
+        orch.register_model(model_handler)
+ 
+        # TrainingHandler — load from disk
+        training_handler = TrainingHandler(
+            config=config,
+            model=None,        # overwritten by load_model()
+            callbacks=[],
+            data_augmentation_handler=None,   # not needed for load_model()
+            visualizations_directory=directory_manager.get("training_visualizations"),
+        )
+        training_handler.load_model(model_path, history_path)
+ 
+        # sync model reference
+        model_handler.model = training_handler.model
+        model               = training_handler.model
+ 
+        # Restore fit timing into training_handler
+        # (load_model() sets these to None; override from metrics.json)
+        training_handler.fit_start   = orch.timestamp_start
+        training_handler.fit_stop    = orch.timestamp_stop
+        training_handler.fit_elapsed = (
+            (orch.timestamp_stop - orch.timestamp_start).total_seconds()
+            if orch.timestamp_start and orch.timestamp_stop else None
+        )
+ 
+        orch.register_training(training_handler)
+ 
+        print(f"Recovery complete")
+        print(f"  experiment : {orch.experiment_name}")
+        print(f"  model      : {model.name}")
+        print(f"  epochs run : {training_handler.epochs_run}")
+        if orch.timestamp_start:
+            print(f"  original start : {orch.timestamp_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        if orch.timestamp_stop:
+            print(f"  original stop  : {orch.timestamp_stop.strftime('%Y-%m-%d %H:%M:%S')}")
+ 
+        return (
+            orch,
+            directory_manager,
+            model,
+            training_handler,
+            callbacks_handler,
+        )
+ 
+    @staticmethod
+    def _restore_timestamps(orch: "TrainExperimentOrchestrator", archive_dir: str) -> None:
+        """Read timestamp_start / timestamp_stop from the archived metrics.json."""
+        metrics_path = os.path.join(archive_dir, "metrics.json")
+        if not os.path.exists(metrics_path):
+            print("metrics.json not found — timestamps will be None")
+            return
+ 
+        with open(metrics_path, "r") as f:
+            m = json.load(f)
+ 
+        fmt = "%Y-%m-%d %H:%M:%S"
+        try:
+            if m.get("timestamp_start"):
+                orch.timestamp_start = datetime.datetime.strptime(
+                    m["timestamp_start"], fmt
+                )
+            if m.get("timestamp_stop"):
+                orch.timestamp_stop = datetime.datetime.strptime(
+                    m["timestamp_stop"], fmt
+                )
+            print(
+                f"Timestamps restored: "
+                f"{m.get('timestamp_start')} → {m.get('timestamp_stop')}"
+            )
+        except (ValueError, TypeError) as e:
+            print(f"Could not parse timestamps from metrics.json: {e}")
 
     # ── registration ─────────────────────────────────────────
 

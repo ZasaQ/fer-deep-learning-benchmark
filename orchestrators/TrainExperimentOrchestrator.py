@@ -170,7 +170,15 @@ class TrainExperimentOrchestrator:
         # ModelHandler (no build — overwritten below)
         model_handler = ModelHandler(config=config, dataset_handler=None)
         loaded_orchestrator.register_model(model_handler)
-
+ 
+        # TrainingHandler — load from disk
+        training_handler = TrainingHandler(
+            config=config,
+            model=None,        # overwritten by load_model()
+            callbacks=[],
+            data_augmentation_handler=None,   # not needed for load_model()
+            visualizations_directory=directory_manager.get("training_visualizations"),
+        )
         metrics_files = [
             f for f in os.listdir(archive_dir)
             if f.startswith("metrics_") and f.endswith(".json")
@@ -194,15 +202,6 @@ class TrainExperimentOrchestrator:
                 ] if (training.get("gpu_count", m.get("gpu_count", 0)) or 0) > 0 else [],
             }
             print(f"Device info restored: {training_handler.device_info['device']}")
- 
-        # TrainingHandler — load from disk
-        training_handler = TrainingHandler(
-            config=config,
-            model=None,        # overwritten by load_model()
-            callbacks=[],
-            data_augmentation_handler=None,   # not needed for load_model()
-            visualizations_directory=directory_manager.get("training_visualizations"),
-        )
         training_handler.load_model(model_path, history_path)
  
         # sync model reference

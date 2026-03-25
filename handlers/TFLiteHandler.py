@@ -82,6 +82,10 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         self.data_augmentation_handler.reset_test_generator()
         test_generator = self.data_augmentation_handler.test_generator
 
+        # Make sure the generator is not shuffling and is reset to the beginning
+        if hasattr(test_generator, 'shuffle'):
+            test_generator.shuffle = False
+
         if hasattr(test_generator, 'index_array') and test_generator.index_array is not None:
             if shuffle:
                 np.random.shuffle(test_generator.index_array)
@@ -101,6 +105,11 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
                             interleaved.append(bucket.pop(0))
 
                 test_generator.index_array = np.array(interleaved)
+
+        # Full reset to ensure it starts from the beginning
+        if hasattr(test_generator, 'reset'):
+            test_generator.reset()
+        else:
             test_generator.index = 0
 
         return test_generator
@@ -440,7 +449,7 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
             'per_class_f1':           per_class_f1,
             'per_class_precision':    per_class_precision,
             'per_class_recall':       per_class_recall,
-            'confusion_matrix':       confusion_matrix(y_true, y_pred).tolist(),
+            'confusion_matrix':       confusion_matrix(y_true, y_pred, labels=range(len(self.class_labels))).tolist(),
             'mean_inference_time_ms': float(np.mean(times)),
             'std_inference_time_ms':  float(np.std(times)),
             'p95_inference_time_ms':  float(np.percentile(times, 95)),
@@ -473,7 +482,6 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         print(f'\n{"=" * 60}\nBENCHMARKING ALL VARIANTS — full test set ({total} samples)\n{"=" * 60}')
         for model_type, model_bytes in self._model_map.items():
             if model_bytes:
-                self.data_augmentation_handler.reset_test_generator()
                 self.benchmark_inference(model_type, shuffle=shuffle, save_raw=save_raw)
 
     # ── visualizations ───────────────────────────────────────

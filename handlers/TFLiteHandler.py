@@ -256,6 +256,37 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         self.convert_dynamic_range_quant()
         self.convert_int8_quant(int8_calibration_fraction=int8_calibration_fraction)
 
+    def load_all(self) -> None:
+        """
+        Loads existing .tflite files from root_directory instead of re-converting.
+        """
+        model_name = (
+            f"{self.config['dataset']}_"
+            f"{self.config['model']}_"
+            f"{self.config['strategy']}"
+        )
+
+        variants = {
+            'float32':       ('float32',       'tflite_model'),
+            'dynamic_quant': ('dynamic_quant', 'tflite_quant_dynamic'),
+            'int8_quant':    ('int8_quant',    'tflite_quant_int8'),
+        }
+
+        for model_type, (suffix, attr) in variants.items():
+            path = os.path.join(self.root_directory, f'{model_name}_{suffix}.tflite')
+            if not os.path.exists(path):
+                print(f"{model_type} — file not found: {path}")
+                continue
+
+            with open(path, 'rb') as f:
+                model_bytes = f.read()
+
+            setattr(self, attr, model_bytes)
+            self.model_sizes[model_type] = len(model_bytes)
+            print(f"{model_type} — {len(model_bytes)/1024:.2f} KB  ←  {path}")
+
+        print(f"\nTFLite models loaded: {list(self.model_sizes.keys())}")
+
     # ── saving ───────────────────────────────────────────────
 
     def save_tflite(self, filepath: str, model_type: str) -> None:

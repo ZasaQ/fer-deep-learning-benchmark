@@ -70,16 +70,28 @@ class TrainExperimentOrchestrator:
     def load_experiment(
         cls,
         experiment_dir: str,
-        config: dict,
+        config: dict = None,
     ) -> tuple:
-        """Load an existing experiment from disk, reconstructing all handlers and state."""
 
-        # DirectoryManager
         directory_manager = DirectoryManager.from_existing(experiment_dir)
         archive_dir       = directory_manager.get("archive")
         root_dir          = directory_manager.get("root")
- 
-        # Locate .keras (saved by ModelCheckpoint in root/)
+
+        # config
+        if config is None:
+            config_files = [
+                f for f in os.listdir(archive_dir)
+                if f.startswith("config_") and f.endswith(".json")
+            ]
+            if not config_files:
+                raise FileNotFoundError(f"No config_*.json found in {archive_dir}.")
+            config_path = os.path.join(archive_dir, sorted(config_files)[0])
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            
+            print(f"Config loaded: {config_path}")
+
+        # Locate .keras (saved by ModelCheckpoint)
         keras_files = sorted(
             f for f in os.listdir(root_dir) if f.endswith(".keras")
         )
@@ -95,19 +107,15 @@ class TrainExperimentOrchestrator:
  
         if not keras_files:
             raise FileNotFoundError(
-                f"No .keras file found in {experiment_dir}.\n"
-                "Ensure ModelCheckpoint saved the model before archiving."
+                f"No .keras file found in {experiment_dir}."
             )
         model_path = keras_files[0]
-        print(f"Model file:   {model_path}")
+        print(f"Model file: {model_path}")
  
         # Locate history.pkl
         history_path = os.path.join(archive_dir, "history.pkl")
         if not os.path.exists(history_path):
-            raise FileNotFoundError(
-                f"history.pkl not found in {archive_dir}.\n"
-                "Cannot restore training state without it."
-            )
+            raise FileNotFoundError(f"history.pkl not found in {archive_dir}.")
  
         # Orchestrator
         orch = cls(config=config)
@@ -133,7 +141,7 @@ class TrainExperimentOrchestrator:
             print(f"epoch_class_f1 restored ({len(_f1)} epochs)")
         else:
             _f1 = []
-            print("epoch_class_f1.pkl not found — plot_per_epoch_class_f1() will be empty")
+            print("epoch_class_f1.pkl not found")
  
         # attach as minimal object so callbacks_handler.per_class_f1_callback.epoch_class_f1 works
         callbacks_handler.per_class_f1_callback = type(
@@ -189,30 +197,31 @@ class TrainExperimentOrchestrator:
         )
  
     @staticmethod
-    def _restore_timestamps(orch: "TrainExperimentOrchestrator", archive_dir: str) -> None:
-        """Read timestamp_start / timestamp_stop from the archived metrics.json."""
-        metrics_path = os.path.join(archive_dir, "metrics.json")
-        if not os.path.exists(metrics_path):
-            print("metrics.json not found — timestamps will be None")
-            return
- 
+    def _restore_timestamps(orch, archive_dir: str) -> None:
+        metrics_files = [
+            f for f in os.listdir(archive_dir)
+            if f.startswith("metrics_") and f.endswith(".json")
+        ]
+        if not metrics_files:
+            legacy = os.path.join(archive_dir, "metrics.json")
+            if os.path.exists(legacy):
+                metrics_files = ["metrics.json"]
+                print("Found legacy metrics.json")
+            else:
+                print("metrics_*.json not found — timestamps will be None")
+                return
+
+        metrics_path = os.path.join(archive_dir, sorted(metrics_files)[0])
         with open(metrics_path, "r") as f:
             m = json.load(f)
- 
+
         fmt = "%Y-%m-%d %H:%M:%S"
         try:
             if m.get("timestamp_start"):
-                orch.timestamp_start = datetime.datetime.strptime(
-                    m["timestamp_start"], fmt
-                )
+                orch.timestamp_start = datetime.datetime.strptime(m["timestamp_start"], fmt)
             if m.get("timestamp_stop"):
-                orch.timestamp_stop = datetime.datetime.strptime(
-                    m["timestamp_stop"], fmt
-                )
-            print(
-                f"Timestamps restored: "
-                f"{m.get('timestamp_start')} → {m.get('timestamp_stop')}"
-            )
+                orch.timestamp_stop = datetime.datetime.strptime(m["timestamp_stop"], fmt)
+            print(f"Timestamps restored: {m.get('timestamp_start')} → {m.get('timestamp_stop')}")
         except (ValueError, TypeError) as e:
             print(f"Could not parse timestamps from metrics.json: {e}")
 
@@ -327,7 +336,8 @@ class TrainExperimentOrchestrator:
         if self.metrics is None:
             self.build_metrics()
 
-        path = os.path.join(self.archive_directory, 'metrics.json')
+        filename = f"metrics_{self.experiment_name}.json"
+        path = os.path.join(self.archive_directory, filename)
         self.metrics.save(path)
         print(f'Metrics saved to: {path}')
         return path

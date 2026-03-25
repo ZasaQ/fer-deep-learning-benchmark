@@ -118,16 +118,33 @@ class TrainExperimentOrchestrator:
             raise FileNotFoundError(f"history.pkl not found in {archive_dir}.")
  
         # Orchestrator
-        orch = cls(config=config)
-        orch.archive_directory = archive_dir
+        loaded_orchestrator = cls(config=config)
+        loaded_orchestrator.archive_directory = archive_dir
  
         # Restore timestamps from old metrics.json
-        cls._restore_timestamps(orch, archive_dir)
+        cls._restore_timestamps(loaded_orchestrator, archive_dir)
+
+        # Load old timestamps
+        if loaded_orchestrator.timestamp_start:
+            original_ts = loaded_orchestrator.timestamp_start.strftime('%Y%m%d-%H%M%S')
+            loaded_orchestrator.experiment_name = (
+                f'{config["id"]}_'
+                f'{config["dataset"]}_'
+                f'{config["model"]}_'
+                f'{config["strategy"]}_'
+                f'{original_ts}'
+            )
+            loaded_orchestrator.model_name = (
+                f'{config["dataset"]}_'
+                f'{config["model"]}_'
+                f'{config["strategy"]}_'
+                f'{original_ts}'
+            )
+            print(f"Experiment name restored: {loaded_orchestrator.experiment_name}")
  
-        # CallbacksHandler (lightweight — no create())
-        callbacks_handler            = CallbacksHandler(
+        callbacks_handler = CallbacksHandler(
             config=config,
-            model_name=orch.model_name,
+            model_name=loaded_orchestrator.model_name,
             directory_manager=directory_manager,
         )
         callbacks_handler.model_path = model_path   # override to actual file
@@ -148,11 +165,35 @@ class TrainExperimentOrchestrator:
             "_RestoredF1", (), {"epoch_class_f1": _f1}
         )()
  
-        orch.register_callbacks(callbacks_handler)
+        loaded_orchestrator.register_callbacks(callbacks_handler)
  
         # ModelHandler (no build — overwritten below)
         model_handler = ModelHandler(config=config, dataset_handler=None)
-        orch.register_model(model_handler)
+        loaded_orchestrator.register_model(model_handler)
+
+        metrics_files = [
+            f for f in os.listdir(archive_dir)
+            if f.startswith("metrics_") and f.endswith(".json")
+        ]
+        if not metrics_files:
+            legacy = os.path.join(archive_dir, "metrics.json")
+            metrics_files = ["metrics.json"] if os.path.exists(legacy) else []
+
+        if metrics_files:
+            with open(os.path.join(archive_dir, sorted(metrics_files)[0])) as f:
+                m = json.load(f)
+            training = m.get("training", m)  # stary format ma training zagnieżdżone, nowy płaski
+            training_handler.device_info = {
+                "device":    training.get("device",    m.get("device",    "unknown")),
+                "gpu_count": training.get("gpu_count", m.get("gpu_count", 0)),
+                "gpus": [
+                    {
+                        "smi_name":        training.get("gpu_name",            m.get("gpu_name")),
+                        "memory_total_mb": training.get("gpu_memory_total_mb", m.get("gpu_memory_total_mb")),
+                    }
+                ] if (training.get("gpu_count", m.get("gpu_count", 0)) or 0) > 0 else [],
+            }
+            print(f"Device info restored: {training_handler.device_info['device']}")
  
         # TrainingHandler — load from disk
         training_handler = TrainingHandler(
@@ -170,26 +211,26 @@ class TrainExperimentOrchestrator:
  
         # Restore fit timing into training_handler
         # (load_model() sets these to None; override from metrics.json)
-        training_handler.fit_start   = orch.timestamp_start
-        training_handler.fit_stop    = orch.timestamp_stop
+        training_handler.fit_start   = loaded_orchestrator.timestamp_start
+        training_handler.fit_stop    = loaded_orchestrator.timestamp_stop
         training_handler.fit_elapsed = (
-            (orch.timestamp_stop - orch.timestamp_start).total_seconds()
-            if orch.timestamp_start and orch.timestamp_stop else None
+            (loaded_orchestrator.timestamp_stop - loaded_orchestrator.timestamp_start).total_seconds()
+            if loaded_orchestrator.timestamp_start and loaded_orchestrator.timestamp_stop else None
         )
  
-        orch.register_training(training_handler)
+        loaded_orchestrator.register_training(training_handler)
  
         print(f"Recovery complete")
-        print(f"  experiment : {orch.experiment_name}")
+        print(f"  experiment : {loaded_orchestrator.experiment_name}")
         print(f"  model      : {model.name}")
         print(f"  epochs run : {training_handler.epochs_run}")
-        if orch.timestamp_start:
-            print(f"  original start : {orch.timestamp_start.strftime('%Y-%m-%d %H:%M:%S')}")
-        if orch.timestamp_stop:
-            print(f"  original stop  : {orch.timestamp_stop.strftime('%Y-%m-%d %H:%M:%S')}")
+        if loaded_orchestrator.timestamp_start:
+            print(f"  original start : {loaded_orchestrator.timestamp_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        if loaded_orchestrator.timestamp_stop:
+            print(f"  original stop  : {loaded_orchestrator.timestamp_stop.strftime('%Y-%m-%d %H:%M:%S')}")
  
         return (
-            orch,
+            loaded_orchestrator,
             directory_manager,
             model,
             training_handler,

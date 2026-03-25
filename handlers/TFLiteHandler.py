@@ -79,23 +79,30 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         return labels, colors
 
     def _prepare_test_generator(self, shuffle: bool) -> object:
+        self.data_augmentation_handler.reset_test_generator()
         test_generator = self.data_augmentation_handler.test_generator
+
         if hasattr(test_generator, 'index_array') and test_generator.index_array is not None:
             if shuffle:
                 np.random.shuffle(test_generator.index_array)
             else:
                 labels_for_indices = test_generator.classes[test_generator.index_array]
-                interleaved = []
+                n_classes = len(self.class_labels)
+
                 class_buckets = [
                     list(test_generator.index_array[labels_for_indices == c])
-                    for c in np.unique(labels_for_indices)
+                    for c in range(n_classes)
                 ]
+
+                interleaved = []
                 while any(class_buckets):
                     for bucket in class_buckets:
                         if bucket:
                             interleaved.append(bucket.pop(0))
+
                 test_generator.index_array = np.array(interleaved)
             test_generator.index = 0
+
         return test_generator
 
     def _total_test_samples(self) -> int:

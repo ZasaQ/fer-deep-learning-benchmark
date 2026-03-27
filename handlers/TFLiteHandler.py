@@ -335,8 +335,14 @@ class TFLiteHandler(TFLiteMetricsMixin, BaseHandler):
         try:
             interpreter = tf.lite.Interpreter(model_content=tflite_model)
             interpreter.allocate_tensors()
+            
+            input_details = interpreter.get_input_details()
+            dummy_input = np.zeros(input_details[0]['shape'], dtype=input_details[0]['dtype'])
+            interpreter.set_tensor(input_details[0]['index'], dummy_input)
+            interpreter.invoke()
+
         except RuntimeError as e:
-            if "XNNPack" in str(e) or "XNNPACK" in str(e):
+            if "XNNPack" in str(e) or "XNNPACK" in str(e) or "failed to prepare" in str(e).lower():
                 print(f"\nXNNPACK failed for {model_type}. Falling back to default CPU kernels...")
                 interpreter = tf.lite.Interpreter(
                     model_content=tflite_model,

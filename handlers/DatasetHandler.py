@@ -11,6 +11,7 @@ import seaborn as sns
 from PIL import Image
 from scipy.stats import gaussian_kde
 from sklearn.manifold import TSNE
+import shutil
 
 from .BaseHandler import BaseHandler
 
@@ -169,34 +170,23 @@ class DatasetHandler(BaseHandler):
     # ── public ──────────────────────────────────────────────
 
     def download_dataset(self) -> None:
-        """Download and extract the dataset from Google Drive."""
-        if os.path.exists('dataset'):
-            print("Data folder already exists.")
-            return
-
         self.dataset_name = self.config['dataset']
-        if self.dataset_name not in self.DATASET_LINKS:
-            raise ValueError(
-                f"Invalid dataset '{self.dataset_name}'. "
-                f"Choose from: {list(self.DATASET_LINKS.keys())}"
+        dest = f'/content/datasets/{self.dataset_name}'
+
+        if not os.path.isdir(dest):
+            raise FileNotFoundError(
+                f"Dataset '{self.dataset_name}' not found at {dest}.\n"
+                "Run the dataset download cell first."
             )
 
-        dataset_zip_file = 'dataset.zip'
-        gdown.download(self.DATASET_LINKS[self.dataset_name], output=dataset_zip_file, fuzzy=True)
+        if os.path.islink('dataset'):
+            os.unlink('dataset')
+        elif os.path.isdir('dataset'):
+            shutil.rmtree('dataset')
 
-        print("Extracting...")
-        with zipfile.ZipFile(dataset_zip_file, 'r') as z:
-            for member in z.infolist():
-                parts = member.filename.split('/', 1)
-                if len(parts) == 1:
-                    continue
-                new_name = parts[1]
-                if not new_name:
-                    continue
-                member.filename = new_name
-                z.extract(member, 'dataset')
+        os.symlink(dest, 'dataset')
+        print(f"Dataset switched to: {self.dataset_name} → {dest}")
 
-        print(f"Dataset ready: {self.dataset_name}\n")
 
     def discover_dataset(self) -> None:
         """Discover class names, image dimensions and color mode from the dataset folder."""

@@ -177,7 +177,7 @@ class TrainExperimentOrchestrator:
         if self.metrics is None:
             self.build_metrics()
 
-        path = os.path.join(self.archive_directory, 'metrics.json')
+        path = os.path.join(self.archive_directory, f'metrics_{self.experiment_name}.json')
         self.metrics.save(path)
         print(f'Metrics saved to: {path}')
         return path

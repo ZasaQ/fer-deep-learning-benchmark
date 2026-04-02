@@ -53,17 +53,6 @@ class BaseHandler:
     def archive_directory(self, value: str) -> None:
         self._archive_directory = value
 
-    @property
-    def summaries_directory(self) -> Optional[str]:
-        """Lazy lookup: own value first, then via ExperimentOrchestrator back-reference."""
-        if self._archive_directory is not None:
-            return os.path.join(self._archive_directory, 'summaries')
-        if self._experiment_orchestrator is not None:
-            archive = self._experiment_orchestrator.archive_directory
-            if archive is not None:
-                return os.path.join(archive, 'summaries')
-        return None
-
     # ── visualization helpers ────────────────────────────────
 
     def _apply_base_style(self) -> None:
@@ -154,14 +143,13 @@ class BaseHandler:
         output = "\n".join(lines)
         print(output)
 
-        if self.summaries_directory:
-            os.makedirs(self.summaries_directory, exist_ok=True)
-            path = os.path.join(self.summaries_directory, filename)
+        if self.archive_directory:
+            path = os.path.join(self.archive_directory, filename)
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(output + "\n")
             print(f"LaTeX saved to: {path}")
         else:
-            print(f"summaries_directory not set — LaTeX not saved.")
+            print(f"archive_directory not set — LaTeX not saved.")
 
     def print_summary(self, mode: str = 'ascii') -> None:
         """Print handler state summary. Override in subclasses."""

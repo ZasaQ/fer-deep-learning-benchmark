@@ -36,7 +36,8 @@ def build_config(widgets):
     global CONFIG
     W = widgets
     CONFIG = {
-        'dataset': W['dataset'].value,
+        'dataset':     W['dataset'].value,
+        'batch_size':  W['batch_size'].value,
         'augmentation': {
             'enabled':            W['use_augmentation'].value,
             'preset':             W['aug_preset'].value,
@@ -81,6 +82,7 @@ def _make_widgets():
     _p = AUGMENTATION_PRESETS[DATASET_DEFAULT_PRESETS['FER2013']]
 
     W['dataset']         = _dropdown('Dataset:', ['FER2013', 'CK+', 'RAF-DB', 'AffectNet'], 'FER2013')
+    W['batch_size']      = _slider('Batch size:', 8, 128, 32, 8)
     W['use_augmentation']= _checkbox('Enable Augmentation', True)
     W['aug_preset']      = _dropdown('Preset:', list(AUGMENTATION_PRESETS.keys()) + ['Custom'],
                                      DATASET_DEFAULT_PRESETS['FER2013'])
@@ -166,17 +168,19 @@ def display_config():
             _preset_applying[0] = False
         refresh()
 
+    # ── Wire observers ──
     W['use_augmentation'].observe(_on_aug_toggle, names='value')
     W['aug_preset'].observe(_on_preset_change, names='value')
     for k in ['rotation', 'width_shift', 'height_shift', 'zoom',
               'brightness_min', 'brightness_max', 'shear', 'horizontal_flip', 'fill_mode']:
         W[k].observe(_on_aug_manual_change, names='value')
 
-    for key in ['dataset', 'use_augmentation', 'aug_preset', 'rotation', 'width_shift',
+    for key in ['dataset', 'batch_size', 'use_augmentation', 'aug_preset', 'rotation', 'width_shift',
                 'height_shift', 'zoom', 'brightness_min', 'brightness_max',
                 'shear', 'horizontal_flip', 'fill_mode']:
         W[key].observe(refresh, names='value')
 
+    # ── Layout ──
     display(HTML("""
     <style>
         .widget-label { text-align: left !important; min-width: 150px !important; }
@@ -196,6 +200,7 @@ def display_config():
     ui = w.VBox([
         w.HTML('<h2>Dataset & Augmentation Config</h2>'),
         W['dataset'],
+        W['batch_size'],
         w.HTML("<hr style='width:320px; margin: 10px 0'>"),
         w.HTML('<h3>Data Augmentation</h3>'),
         W['use_augmentation'],

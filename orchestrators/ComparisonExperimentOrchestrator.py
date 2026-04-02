@@ -1,30 +1,32 @@
 import os
+import shutil
 import zipfile
 from datetime import datetime as _dt
 from typing import Optional
 
-import gdown
-from google.colab import files
+from google.colab import drive, files
 
 
-class ComparisonOrchestrator:
-    """Handles Google Drive download, ZIP unpacking, plot archiving and local download."""
+class ComparisonExperimentOrchestrator:
+
+    DRIVE_MOUNT_PATH   = '/content/drive'
+    DRIVE_SOURCE_PATH  = 'MyDrive/WSEI/R2S1/Magisterka/Trained'
 
     def __init__(self):
         self.timestamp       = _dt.now().strftime('%Y%m%d-%H%M%S')
         self.experiment_name = f'comparison_experiment_{self.timestamp}'
 
-        self.trained_zips_dir     = None
-        self.trained_unpacked_dir = None
-
         self._comparison_experiment_dir = None
         self._archive_dir               = None
+
+        self.trained_zips_dir     = None
+        self.trained_unpacked_dir = None
 
         self._keras_handler  = None
         self._tflite_handler = None
 
         print(f'Experiment name: {self.experiment_name}')
-        print('ComparisonOrchestrator initialized.')
+        print('ComparisonExperimentOrchestrator initialized.')
 
     # ── registration ──────────────────────────────────────────────────────────
 
@@ -55,54 +57,89 @@ class ComparisonOrchestrator:
     def is_complete(self) -> bool:
         """Check if all required directories and handlers are configured."""
         checks = {
-            'zips_dir':                  self.trained_zips_dir is not None,
-            'unpacked_dir':              self.trained_unpacked_dir is not None,
-            'comparison_experiment_dir': self._archive_dir is not None,
+            'comparison_experiment_dir': self.comparison_experiment_dir is not None,
+            'trained_zips_dir':          self.trained_zips_dir is not None,
+            'trained_unpacked_dir':      self.trained_unpacked_dir is not None,
             'keras_handler':             self._keras_handler is not None,
             'tflite_handler':            self._tflite_handler is not None,
         }
         all_ok = all(checks.values())
-        print('\nComparisonOrchestrator status:')
+        print('\ComparisonExperimentOrchestrator status:')
         for name, ok in checks.items():
-            status = 'Ok' if ok else 'Error'
-            print(f'  {status} {name}')
+            print(f'  {"Ok" if ok else "Error"} {name}')
         return all_ok
 
-    # ── download ──────────────────────────────────────────────────────────────
+    # ── drive ─────────────────────────────────────────────────────────────────
 
-    def download_experiments(self, source: str) -> list:
-        """Downloads experiment ZIPs from a Google Drive folder share link."""
-        self._check('download_experiments', self.trained_zips_dir, 'zips_dir')
-        print(f'Downloading experiments from Google Drive -> {self.trained_zips_dir}')
-        gdown.download_folder(
-            url=source,
-            output=self.trained_zips_dir,
-            quiet=False,
-            use_cookies=False,
-        )
-        zips = sorted([f for f in os.listdir(self.trained_zips_dir) if f.endswith('.zip')])
-        print(f'  Download complete — {len(zips)} ZIPs in {self.trained_zips_dir}')
-        return zips
+    def mount_drive(self) -> None:
+        drive.mount(self.DRIVE_MOUNT_PATH)
+        print(f'Google Drive mounted at {self.DRIVE_MOUNT_PATH}')
+
+    def _drive_source_dir(self) -> str:
+        return os.path.join(self.DRIVE_MOUNT_PATH, self.DRIVE_SOURCE_PATH)
+
+    # ── copy ──────────────────────────────────────────────────────────────────
+
+    def copy_experiments(self, pattern: Optional[str] = None) -> list:
+        """Copies experiment ZIPs from Drive into local zips_dir. Skips existing."""
+        self._check('copy_experiments', self.trained_zips_dir, 'zips_dir')
+
+        source_dir = self._drive_source_dir()
+        if not os.path.isdir(source_dir):
+            raise FileNotFoundError(
+                f'Drive source directory not found: {source_dir}\n'
+                'Call mount_drive() first.'
+            )
+
+        os.makedirs(self.trained_zips_dir, exist_ok=True)
+
+        available = sorted([f for f in os.listdir(source_dir) if f.endswith('.zip')])
+        if pattern:
+            available = [f for f in available if pattern in f]
+
+        if not available:
+            raise FileNotFoundError(
+                f'No ZIPs found in {source_dir}'
+                + (f' matching pattern "{pattern}"' if pattern else '')
+            )
+
+        print(f'Copying {len(available)} ZIPs from Drive -> {self.trained_zips_dir}')
+        copied, skipped = [], []
+        for filename in available:
+            src  = os.path.join(source_dir, filename)
+            dest = os.path.join(self.trained_zips_dir, filename)
+            if os.path.exists(dest):
+                print(f'{filename} (already exists)')
+                skipped.append(dest)
+                continue
+            shutil.copy2(src, dest)
+            print(f'  {filename}')
+            copied.append(dest)
+
+        print(f'  Copied {len(copied)}, skipped {len(skipped)} — '
+              f'{len(copied) + len(skipped)} ZIPs total in {self.trained_zips_dir}')
+        return copied + skipped
 
     # ── unzip ─────────────────────────────────────────────────────────────────
 
     def unzip_experiments(self) -> list:
-        """Unpacks ZIPs from zips/ into unpacked/, one folder per experiment. Skips existing."""
         self._check('unzip_experiments', self.trained_zips_dir,     'zips_dir')
         self._check('unzip_experiments', self.trained_unpacked_dir, 'unpacked_dir')
+
         zips = sorted([f for f in os.listdir(self.trained_zips_dir) if f.endswith('.zip')])
         if not zips:
             raise FileNotFoundError(
                 f'No ZIPs found in {self.trained_zips_dir}. '
-                'Call download_experiments() first.'
+                'Call copy_experiments() first.'
             )
+
         print(f'Unpacking {len(zips)} experiment ZIPs ...')
         unpacked = []
         for zip_name in zips:
             zip_path = os.path.join(self.trained_zips_dir, zip_name)
             dest     = os.path.join(self.trained_unpacked_dir, os.path.splitext(zip_name)[0])
             if os.path.exists(dest):
-                print(f'  [skip] {zip_name} (already unpacked)')
+                print(f'{zip_name} (already unpacked)')
                 unpacked.append(dest)
                 continue
             os.makedirs(dest)
@@ -110,14 +147,17 @@ class ComparisonOrchestrator:
                 zf.extractall(dest)
             print(f'  {zip_name} -> {os.path.basename(dest)}/')
             unpacked.append(dest)
+
         print(f'  {len(unpacked)} experiments ready in {self.trained_unpacked_dir}')
         return unpacked
 
     # ── archive ───────────────────────────────────────────────────────────────
 
     def archive_results(self, archive_name: Optional[str] = None) -> str:
-        """Zips the entire comparison experiment folder into archive/."""
         self._check('archive_results', self._archive_dir, 'comparison_experiment_dir')
+
+        os.makedirs(self._archive_dir, exist_ok=True)
+
         archive_name = archive_name or f'comparison_results_{self.timestamp}'
         archive_path = os.path.join(self._archive_dir, f'{archive_name}.zip')
 
@@ -142,6 +182,7 @@ class ComparisonOrchestrator:
     def download_archive(self, archive_path: Optional[str] = None) -> None:
         """Downloads the most recent (or specified) archive to local via Colab."""
         self._check('download_archive', self._archive_dir, 'comparison_experiment_dir')
+
         if archive_path is None:
             zips = sorted(
                 [f for f in os.listdir(self._archive_dir) if f.endswith('.zip')],

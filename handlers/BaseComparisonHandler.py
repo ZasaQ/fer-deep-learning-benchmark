@@ -117,7 +117,7 @@ class BaseComparisonHandler(BaseHandler):
         if not folders:
             raise FileNotFoundError(
                 f'No experiment folders found in {self.train_experiments_dir}. '
-                'Call ComparisonOrchestrator.unzip_experiments() first.'
+                'Call ComparisonExperimentOrchestrator.unzip_experiments() first.'
             )
         print(f'Found {len(folders)} experiment folders — loading ...')
         failed = []

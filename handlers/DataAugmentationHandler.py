@@ -276,7 +276,7 @@ class DataAugmentationHandler(BaseHandler):
         Show the isolated effect of each augmentation parameter in a separate row.
         Column headers indicate the approximate transformation magnitude.
         """
-        aug = CONFIG['augmentation']
+        aug = self.config['augmentation']
         if not aug['enabled']:
             print("     Augmentation is disabled.")
             return
@@ -358,7 +358,7 @@ class DataAugmentationHandler(BaseHandler):
                 title = col_titles[i] if row == 0 else ''
                 self._show_image(axes[row, i + 1], batch[0], title)
 
-        plt.suptitle(f'Isolated Augmentation Effects | {class_name.capitalize()} | {CONFIG["dataset"]}')
+        plt.suptitle(f'Isolated Augmentation Effects | {class_name.capitalize()} | {self.config["dataset"]}')
         self._save_fig('augmentation_parameter_effects.png')
 
     def visualize_augmentation_diversity(self, grid_size: int,

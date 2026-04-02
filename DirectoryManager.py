@@ -102,38 +102,54 @@ class DirectoryManager:
         return total / (1024 * 1024)
 
     def print_structure(self) -> None:
-        """Print a tree-like structure of the experiment directories."""
+        """Print a tree-like structure of the created directories."""
         if not self.paths:
             print('Directories not created yet.')
             return
 
+        root_abs = os.path.abspath(self.root)
+
+        inside  = {}
+        outside = {}
+        for k, v in self.paths.items():
+            if k == 'root':
+                continue
+            abs_v = os.path.abspath(v)
+            try:
+                rel = os.path.relpath(abs_v, root_abs)
+                if rel.startswith('..'):
+                    outside[k] = abs_v
+                else:
+                    inside[k] = rel
+            except ValueError:
+                outside[k] = abs_v
+
         print(f'\n{self.root}/')
-
-        entries = {k: v for k, v in self.paths.items() if k != 'root'}
-
-        relatives = sorted(set(
-            os.path.relpath(v, self.root) for v in entries.values()
-        ))
 
         def print_tree(prefix: str, items: list[str]) -> None:
             direct = {}
             for item in items:
                 parts = item.split(os.sep)
-                top = parts[0]
-                rest = os.sep.join(parts[1:])
+                top   = parts[0]
+                rest  = os.sep.join(parts[1:])
                 if top not in direct:
                     direct[top] = []
                 if rest:
                     direct[top].append(rest)
-
             keys = list(direct.keys())
             for i, key in enumerate(keys):
-                is_last = (i == len(keys) - 1)
+                is_last   = (i == len(keys) - 1)
                 connector = '└── ' if is_last else '├── '
                 print(f'{prefix}{connector}{key}/')
                 if direct[key]:
                     extension = '    ' if is_last else '│   '
                     print_tree(prefix + extension, direct[key])
 
-        print_tree('   ', relatives)
+        print_tree('   ', sorted(inside.values()))
+
+        if outside:
+            print('\nExternal directories:')
+            for key, path in sorted(outside.items()):
+                print(f'   {key} -> {path}')
+
         print()

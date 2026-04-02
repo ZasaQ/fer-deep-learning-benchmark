@@ -6,6 +6,7 @@ import zipfile
 import datetime
 from typing import Optional
 
+from google.colab import files, runtime
 import tensorflow as tf
 
 from handlers import DatasetHandler, DataAugmentationHandler
@@ -18,15 +19,14 @@ class DataExperimentOrchestrator():
 
     def __init__(self, config: dict):
         self._config          = config
-        self._archive_directory: Optional[str] = None
-        self._experiment_orchestrator = None
+        self.archive_directory: Optional[str] = None
         self.timestamp_start = datetime.datetime.now()
         self.timestamp_stop: Optional[datetime.datetime] = None
         self.timestamp       = self.timestamp_start.strftime('%Y%m%d-%H%M%S')
 
         self.experiment_name = (
             f'{config["dataset"]}_'
-            f'{config["augmentation"]['preset']}_'
+            f'{config["augmentation"]["preset"]}_'
             f'{self.timestamp}'
         )
 
@@ -74,30 +74,23 @@ class DataExperimentOrchestrator():
         data_augmentation_handler._experiment_orchestrator = self
         print('DataAugmentationHandler registered.')
 
+    # ── configuration ────────────────────────────────────────
+
+    def configure_archive(self, dir_handler) -> None:
+        """Set archive_directory on self."""
+        self.archive_directory = dir_handler.get('archive')
+        print(f'Archive directory configured: {self.archive_directory}')
+
     # ── saving ────────────────────────────────────────────────
 
-    def save_config(self, name: str = 'config') -> str:
+    def save_config(self) -> str:
         """Save CONFIG dictionary as JSON."""
-        path = os.path.join(self.archive_directory, f'{name}.json')
+        config_filename = f'config_{self.experiment_name}.json'
+        path = os.path.join(self.archive_directory, config_filename)
         with open(path, 'w') as f:
             json.dump(self._config, f, indent=2)
         print(f"Config saved to: {path}")
         return path
-
-    # ── archive directory ────────────────────────────────────
-
-    @property
-    def archive_directory(self) -> Optional[str]:
-        """Lazy lookup: own value first, then via ExperimentHandler back-reference."""
-        if self._archive_directory is not None:
-            return self._archive_directory
-        if self._experiment_orchestrator is not None:
-            return self._experiment_orchestrator.archive_directory
-        return None
-
-    @archive_directory.setter
-    def archive_directory(self, value: str) -> None:
-        self._archive_directory = value
 
     # ── archive ───────────────────────────────────────────────
 
@@ -134,10 +127,12 @@ class DataExperimentOrchestrator():
                     pass
                 except Exception as e:
                     print(f'{h.__class__.__name__}.generate_summary() failed: {e}')
+            else:
+                print('No LaTeX summaries to be saved')
 
     def is_complete(self) -> bool:
         """Check if archive contains config.json (minimal requirement)."""
-        return os.path.exists(os.path.join(self.archive_directory, 'config.json'))
+        return os.path.exists(os.path.join(self.archive_directory, f'config_{self.experiment_name}.json'))
 
     # ── zip & download ───────────────────────────────────────
 
@@ -174,7 +169,6 @@ class DataExperimentOrchestrator():
         zip_path = self.create_zip()
 
         try:
-            from google.colab import files
             print(f"Starting download: {os.path.basename(zip_path)}")
             files.download(zip_path)
         except ImportError:
@@ -214,7 +208,6 @@ class DataExperimentOrchestrator():
 
         if self._data_augmentation_handler is not None:
             try:
-                ah = self._data_augmentation_handler
                 summary['augmentation'] = {
                     'enabled': self._config['augmentation'].get('enabled'),
                     'preset':  self._config['augmentation'].get('preset'),
@@ -289,7 +282,6 @@ class DataExperimentOrchestrator():
         """
         Clear TensorFlow session, free memory, and disconnect Colab runtime.
         """
-
         print("Clearing TensorFlow session...")
         try:
             tf.keras.backend.clear_session()
@@ -302,7 +294,6 @@ class DataExperimentOrchestrator():
         print("Memory freed.")
 
         try:
-            from google.colab import runtime
             print(f"Shutting down runtime in {delay}s...")
             time.sleep(delay)
             runtime.unassign()

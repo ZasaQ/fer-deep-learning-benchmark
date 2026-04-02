@@ -1,5 +1,3 @@
-from typing import Optional
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,11 +5,10 @@ import matplotlib.ticker as mticker
 import seaborn as sns
 
 from .BaseComparisonHandler import BaseComparisonHandler
-from DirectoryManager import DirectoryManager
 
 
 class ComparisonTFLiteHandler(BaseComparisonHandler):
-    """Handler for visualizing and comparing TFLite conversion results across all experiments."""
+    """Handler for loading, processing and visualizing TFLite conversion experiment results in the comparison experiment context."""
 
     def __init__(
         self,
@@ -24,55 +21,64 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
         )
         print('ComparisonTFLiteHandler initialized.')
 
-    # ── visualizations ────────────────────────────────────────────────────────────
+    # ── visualization ────────────────────────────────────────────────────────
 
-    def plot_size_vs_accuracy(self, figsize=(13, 7)) -> None:
+    def plot_size_vs_accuracy_by_strategy(self, figsize=(14, 10)) -> None:
+        """Plot scatter charts of TFLite model size vs test accuracy, colored by model and faceted by strategy."""
         self._check_loaded()
 
-        variant_markers = {
-            'float32':       ('o', 'float32'),
-            'dynamic_quant': ('s', 'Dynamic Range'),
-            'int8_quant':    ('^', 'Full INT8'),
-        }
-        fig, ax = plt.subplots(figsize=figsize)
-        fig.suptitle('Model Size vs Accuracy  —  TFLite (all 156 variants)',
-                     fontsize=13, fontweight='bold')
-        seen_models, seen_variants = set(), set()
-        for _, row in self.df.iterrows():
-            model = row['model']
-            color = self.MODEL_COLORS.get(model, '#888')
-            for vkey, (marker, _) in variant_markers.items():
-                acc  = row.get(f'tflite_{vkey}_accuracy')
-                size = row.get(f'tflite_{vkey}_size_kb')
-                if pd.isna(acc) or pd.isna(size):
-                    continue
-                ax.scatter(size / 1024, acc, color=color, marker=marker,
-                           s=75, alpha=0.82, edgecolors='white', linewidths=0.6, zorder=3)
-                seen_models.add(model)
-                seen_variants.add(vkey)
-        ax.set_xlabel('Model Size (MB)')
-        ax.set_ylabel('TFLite Test Accuracy')
-        ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=0))
-        model_h = [
+        strategies = [s for s in self.STRATEGY_ORDER if s in self.df['strategy'].values]
+        n_cols = 2
+        n_rows = int(np.ceil(len(strategies) / n_cols))
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False, sharey=True)
+        fig.suptitle('Model Size vs TFLite Accuracy by Strategy', y=1.01)
+
+        for idx, strategy in enumerate(strategies):
+            ax     = axes[idx // n_cols][idx % n_cols]
+            subset = self.df[self.df['strategy'] == strategy]
+
+            for _, row in subset.iterrows():
+                model = row['model']
+                color = self.MODEL_COLORS.get(model, '#888')
+                for vkey in self.TFLITE_VARIANTS:
+                    acc  = row.get(f'tflite_{vkey}_accuracy')
+                    size = row.get(f'tflite_{vkey}_size_kb')
+                    if pd.isna(acc) or pd.isna(size):
+                        continue
+                    ax.scatter(size / 1024, acc, color=color,
+                               s=60, alpha=0.8, edgecolors='white',
+                               linewidths=0.6, zorder=3)
+
+            ax.set_title(strategy, fontsize=11)
+            ax.set_xlabel('Model Size (MB)', fontsize=9)
+            ax.set_ylabel('TFLite Test Accuracy' if idx % n_cols == 0 else '', fontsize=9)
+            ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=0))
+            ax.grid(axis='both', alpha=0.3)
+
+        for idx in range(len(strategies), n_rows * n_cols):
+            axes[idx // n_cols][idx % n_cols].set_visible(False)
+
+        model_handles = [
             plt.Line2D([0], [0], marker='o', color='w',
-                       markerfacecolor=self.MODEL_COLORS.get(m, '#888'), markersize=9, label=m)
-            for m in self.MODEL_ORDER if m in seen_models
+                       markerfacecolor=self.MODEL_COLORS.get(m, '#888'),
+                       markersize=8, label=m)
+            for m in self.MODEL_ORDER if m in self.df['model'].values
         ]
-        var_h = [
-            plt.Line2D([0], [0], marker=mk, color='w',
-                       markerfacecolor='#555', markersize=9, label=lbl)
-            for vkey, (mk, lbl) in variant_markers.items() if vkey in seen_variants
-        ]
-        l1 = ax.legend(handles=model_h, loc='lower right',
-                       title='Model', frameon=True, fontsize=9)
-        ax.add_artist(l1)
-        ax.legend(handles=var_h, loc='lower left',
-                  title='Quantization', frameon=True, fontsize=9)
-        self._save_fig('size_vs_accuracy.png')
+        fig.legend(handles=model_handles, loc='lower center',
+                   ncol=len(model_handles), bbox_to_anchor=(0.5, -0.02),
+                   frameon=False, fontsize=10)
 
-    def plot_quantization_accuracy_delta(self, figsize=(14, 9)) -> None:
+        plt.tight_layout()
+        for row_axes in axes:
+            for ax in row_axes:
+                ax.tick_params(labelleft=True)
+        plt.subplots_adjust(bottom=0.10)
+        self._save_fig('size_vs_accuracy_by_strategy.png')
+
+    def plot_quantization_accuracy_delta(self, figsize=(14, 8)) -> None:
+        """Plot heatmaps of TFLite quantization accuracy delta vs Keras baseline across models and datasets, faceted by quantization variant."""
         self._check_loaded()
-        
+
         needed = ['model', 'dataset', 'strategy', 'test_accuracy',
                   'tflite_float32_accuracy', 'tflite_dynamic_quant_accuracy',
                   'tflite_int8_quant_accuracy']
@@ -81,7 +87,7 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
             df['test_accuracy'] = df['tflite_float32_accuracy']
         df = df.dropna(subset=['test_accuracy'])
         if df.empty:
-            print('  [skip] No data for quantization delta plot')
+            print('No data for quantization delta plot')
             return
 
         for vkey in ('dynamic_quant', 'int8_quant'):
@@ -92,14 +98,14 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
         delta_cols = [c for c in ('delta_dynamic_quant', 'delta_int8_quant')
                       if c in df.columns]
         if not delta_cols:
-            print('  [skip] No TFLite variant data for delta plot')
+            print('No TFLite variant data for delta plot')
             return
 
         col_labels = {'delta_dynamic_quant': 'Dynamic Range', 'delta_int8_quant': 'Full INT8'}
-        pivot_data = df.groupby(['model', 'dataset'])[delta_cols].mean().reset_index()
-        keras_acc  = (df.groupby(['model', 'dataset'])['test_accuracy']
-                       .mean().reset_index()
-                       .rename(columns={'test_accuracy': 'keras_acc'}))
+        pivot_data = df.groupby(['model', 'dataset'], observed=True)[delta_cols].mean().reset_index()
+        keras_acc  = (df.groupby(['model', 'dataset'], observed=True)['test_accuracy']
+                        .mean().reset_index()
+                        .rename(columns={'test_accuracy': 'keras_acc'}))
         pivot_data = pivot_data.merge(keras_acc, on=['model', 'dataset'])
 
         pivots = {}
@@ -119,11 +125,7 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
         fig, axes  = plt.subplots(1, n_variants, figsize=figsize, sharey=True)
         if n_variants == 1:
             axes = [axes]
-        fig.suptitle(
-            'Quantization Accuracy Delta  —  Δ = TFLite accuracy − Keras accuracy\n'
-            '(negative = accuracy loss after quantization; Keras baseline in parentheses)',
-            fontsize=12, fontweight='bold',
-        )
+        fig.suptitle('TFLite Quantization Accuracy Delta', y=1.01)
         abs_max = max(pivots[c].abs().max().max() for c in delta_cols
                       if not pivots[c].empty)
         abs_max = max(abs_max, 0.01)
@@ -145,7 +147,7 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
                         annot=annot, fmt='', cmap='RdBu', center=0,
                         vmin=-abs_max, vmax=abs_max,
                         linewidths=0.5, linecolor='#dddddd',
-                        cbar_kws={'label': 'Δ Accuracy', 'shrink': 0.75},
+                        cbar_kws={'label': 'Accuracy Delta', 'shrink': 0.75},
                         annot_kws={'size': 8})
             if mask.any().any():
                 sns.heatmap(pivot, ax=ax, mask=~mask,
@@ -156,97 +158,142 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
             ax.set_ylabel('Model' if ax is axes[0] else '', labelpad=8)
             ax.tick_params(axis='x', rotation=0)
             ax.tick_params(axis='y', rotation=0)
+
+        plt.tight_layout()
+        for ax in axes:
+            ax.tick_params(labelleft=True)
         self._save_fig('quantization_accuracy_delta.png')
 
-    def plot_tflite_aggregated_scatter(self, figsize=(12, 7)) -> None:
+    def plot_accuracy_heatmap(self, figsize=(9, 6)) -> None:
+        """Plot a heatmap of TFLite accuracy across models and quantization variants, faceted by dataset and strategy."""
         self._check_loaded()
 
-        variant_markers = {
-            'float32':       ('o', 'float32',       '#cccccc'),
-            'dynamic_quant': ('s', 'Dynamic Range', '#888888'),
-            'int8_quant':    ('^', 'Full INT8',      '#333333'),
+        variant_labels = {
+            'float32':       'float32',
+            'dynamic_quant': 'Dynamic Range',
+            'int8_quant':    'Full INT8',
         }
-        abbrev = {
-            'SimpleCNN': 'SC', 'VGG16': 'VGG', 'ResNet50': 'RN50',
-            'MobileNetV2': 'MNV2', 'EfficientNetB0': 'ENB0',
+        models = [m for m in self.MODEL_ORDER if m in self.df['model'].values]
+
+        pivot_acc  = pd.DataFrame(index=models, columns=self.TFLITE_VARIANTS, dtype=float)
+        for model in models:
+            mdf = self.df[self.df['model'] == model]
+            for vkey in self.TFLITE_VARIANTS:
+                pivot_acc.loc[model, vkey] = mdf[f'tflite_{vkey}_accuracy'].mean(skipna=True)
+
+        pivot_acc  = pivot_acc.rename(columns=variant_labels)
+        annot      = pivot_acc.map(lambda v: f'{v:.1%}' if pd.notna(v) else '')
+
+        fig, ax = plt.subplots(figsize=figsize)
+        fig.suptitle('TFLite Mean Accuracy | Model × Quantization Variant', y=1.01)
+
+        sns.heatmap(
+            pivot_acc.astype(float),
+            ax=ax,
+            annot=annot,
+            fmt='',
+            cmap='YlGn',
+            vmin=pivot_acc.astype(float).min().min(),
+            vmax=pivot_acc.astype(float).max().max(),
+            linewidths=0.5,
+            linecolor='#dddddd',
+            cbar_kws={'label': 'Mean Accuracy', 'shrink': 0.75},
+            annot_kws={'size': 10},
+        )
+        ax.set_xlabel('Quantization Variant', fontsize=10)
+        ax.set_ylabel('Model', fontsize=10)
+        ax.tick_params(axis='x', rotation=0)
+        ax.tick_params(axis='y', rotation=0)
+
+        plt.tight_layout()
+        self._save_fig('tflite_accuracy_heatmap.png')
+
+    def plot_compression_ratio_scatter(self, figsize=(10, 8)) -> None:
+        """Plot scatter charts of TFLite compression ratio vs accuracy and accuracy delta, colored by model and faceted by quantization variant."""
+        self._check_loaded()
+
+        cr_cols = [f'tflite_{v}_compression_ratio' for v in self.TFLITE_VARIANTS]
+        ad_cols = [f'tflite_{v}_accuracy_delta'     for v in self.TFLITE_VARIANTS]
+
+        has_cr = any(c in self.df.columns and self.df[c].notna().any() for c in cr_cols)
+        has_ad = any(c in self.df.columns and self.df[c].notna().any() for c in ad_cols)
+
+        if not has_cr:
+            print('No compression_ratio data available.')
+            return
+
+        variant_labels = {
+            'float32':       'float32',
+            'dynamic_quant': 'Dynamic Range',
+            'int8_quant':    'Full INT8',
         }
 
         rows = []
-        for model in self.MODEL_ORDER:
-            mdf = self.df[self.df['model'] == model]
-            for vkey, (marker, label, _) in variant_markers.items():
-                mean_acc  = mdf[f'tflite_{vkey}_accuracy'].mean(skipna=True)
-                mean_size = mdf[f'tflite_{vkey}_size_kb'].mean(skipna=True) / 1024
-                lat_col   = f'tflite_{vkey}_p95_ms'
-                mean_lat  = mdf[lat_col].mean(skipna=True) if lat_col in mdf.columns else 5.0
-                if pd.isna(mean_acc) or pd.isna(mean_size):
+        for _, row in self.df.iterrows():
+            model = str(row['model'])
+            for vkey in self.TFLITE_VARIANTS:
+                cr  = row.get(f'tflite_{vkey}_compression_ratio')
+                acc = row.get(f'tflite_{vkey}_accuracy')
+                if has_ad:
+                    delta = row.get(f'tflite_{vkey}_accuracy_delta')
+                else:
+                    keras_acc = row.get('test_accuracy')
+                    delta = (float(acc) - float(keras_acc)
+                            if pd.notna(acc) and pd.notna(keras_acc) else None)
+                if pd.isna(cr) or pd.isna(acc):
                     continue
-                rows.append({'model': model, 'variant': vkey, 'label': label,
-                             'accuracy': mean_acc, 'size_mb': mean_size, 'p95_ms': mean_lat})
+                rows.append({
+                    'model':   model,
+                    'variant': vkey,
+                    'dataset': str(row['dataset']),
+                    'cr':      float(cr),
+                    'acc':     float(acc),
+                    'delta':   float(delta) if delta is not None and not pd.isna(delta) else 0.0,
+                })
+
         if not rows:
-            print('  [skip] No TFLite data for aggregated scatter')
+            print('No data for compression-accuracy Pareto plot.')
             return
 
-        agg          = pd.DataFrame(rows)
-        lat_vals     = agg['p95_ms'].values
-        lat_min, lat_max = lat_vals.min(), lat_vals.max()
-        lat_range    = lat_max - lat_min if lat_max > lat_min else 1.0
-        marker_sizes = 50 + 350 * (lat_vals - lat_min) / lat_range
+        df_plot  = pd.DataFrame(rows)
+        variants = [v for v in self.TFLITE_VARIANTS if v in df_plot['variant'].values]
 
-        fig, ax = plt.subplots(figsize=figsize)
-        fig.suptitle(
-            'TFLite: Model Size vs Accuracy  —  Aggregated (mean across datasets & strategies)\n'
-            'Point size = mean p95 inference latency  |  5 models × 3 quantization variants',
-            fontsize=11, fontweight='bold',
-        )
-        for i, row in agg.iterrows():
-            mk    = variant_markers[row['variant']][0]
-            color = self.MODEL_COLORS.get(row['model'], '#888')
-            ax.scatter(row['size_mb'], row['accuracy'], color=color, marker=mk,
-                       s=marker_sizes[i], alpha=0.88,
-                       edgecolors='white', linewidths=0.8, zorder=4)
-            ax.annotate(abbrev.get(row['model'], row['model']),
-                        (row['size_mb'], row['accuracy']),
-                        textcoords='offset points', xytext=(5, 4),
-                        fontsize=7.5, color=color, fontweight='bold')
-
-        for vkey, (mk, vlabel, frontier_color) in variant_markers.items():
-            vdata = agg[agg['variant'] == vkey].sort_values('size_mb')
-            if len(vdata) < 2:
-                continue
-            pareto, best_acc = [], -1.0
-            for _, r in vdata.iterrows():
-                if r['accuracy'] >= best_acc:
-                    pareto.append(r)
-                    best_acc = r['accuracy']
-            if len(pareto) >= 2:
-                ax.plot([p['size_mb'] for p in pareto],
-                        [p['accuracy'] for p in pareto],
-                        color=frontier_color, linewidth=1.0,
-                        linestyle='--', alpha=0.5, zorder=2)
-
-        ax.set_xlabel('Mean Model Size (MB)')
-        ax.set_ylabel('Mean TFLite Accuracy')
-        ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=0))
-        model_h = [
+        model_handles = [
             plt.Line2D([0], [0], marker='o', color='w',
-                       markerfacecolor=self.MODEL_COLORS.get(m, '#888'), markersize=9, label=m)
-            for m in self.MODEL_ORDER if m in agg['model'].values
+                    markerfacecolor=self.MODEL_COLORS.get(m, '#888'),
+                    markersize=8, label=m)
+            for m in self.MODEL_ORDER if m in df_plot['model'].values
         ]
-        var_h = [
-            plt.Line2D([0], [0], marker=mk, color='w',
-                       markerfacecolor='#555', markersize=9, label=lbl)
-            for vkey, (mk, lbl, _) in variant_markers.items()
-            if vkey in agg['variant'].values
-        ]
-        for lat_val, s_val in [(lat_min, 50), (lat_max, 400)]:
-            model_h.append(plt.Line2D([0], [0], marker='o', color='w',
-                                      markerfacecolor='#aaa',
-                                      markersize=(s_val / 50) ** 0.5 * 4,
-                                      label=f'p95 latency ~{lat_val:.1f} ms'))
-        l1 = ax.legend(handles=model_h, loc='lower right',
-                       title='Model / Latency', frameon=True, fontsize=8)
-        ax.add_artist(l1)
-        ax.legend(handles=var_h, loc='upper left',
-                  title='Quantization', frameon=True, fontsize=8)
-        self._save_fig('tflite_aggregated_scatter.png')
+
+        for vkey in variants:
+            vdf = df_plot[df_plot['variant'] == vkey]
+            fig, axes = plt.subplots(1, 2, figsize=figsize)
+            fig.suptitle(f'TFLite Compression Ratio vs Accuracy | {variant_labels[vkey]}', y=1.01)
+
+            for ax, y_col, y_label in zip(
+                axes,
+                ['acc',   'delta'],
+                ['TFLite Accuracy', 'Accuracy Delta vs Keras'],
+            ):
+                for _, row in vdf.iterrows():
+                    color = self.MODEL_COLORS.get(row['model'], '#888')
+                    ax.scatter(row['cr'], row[y_col], color=color,
+                            s=55, alpha=0.72, edgecolors='white',
+                            linewidths=0.5, zorder=3)
+
+                if y_col == 'delta':
+                    ax.axhline(0, color='black', linewidth=1.0, linestyle='-', alpha=0.4)
+
+                ax.set_xlabel('Compression Ratio (Keras / TFLite)', fontsize=9)
+                ax.set_title(y_label, fontsize=11)
+                if y_col == 'acc':
+                    ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=0))
+                ax.grid(axis='both', alpha=0.3)
+
+            fig.legend(handles=model_handles, loc='lower center',
+                    ncol=len(model_handles), bbox_to_anchor=(0.5, -0.04),
+                    frameon=False, fontsize=9)
+
+            plt.tight_layout()
+            plt.subplots_adjust(bottom=0.12)
+            self._save_fig(f'compression_ratio_scatter_{vkey}.png')

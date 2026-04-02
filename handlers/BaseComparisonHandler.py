@@ -24,7 +24,6 @@ _CLASS_ALIASES = {
 }
 
 
-
 @dataclass
 class ExperimentRecord:
     experiment_id: str
@@ -55,8 +54,6 @@ class ExperimentRecord:
 class BaseComparisonHandler(BaseHandler):
     """Shared base for Keras and TFLite comparison handlers — loading, DataFrame building, shared constants."""
 
-    # ── ordering & display constants ──────────────────────────────────────────
-
     MODEL_ORDER = [
         'SimpleCNN', 'VGG16', 'ResNet50', 'MobileNetV2', 'EfficientNetB0',
     ]
@@ -85,8 +82,12 @@ class BaseComparisonHandler(BaseHandler):
         'PFT':      '-.',
         'FFT':      ':',
     }
-
-    # ── parsing helpers ───────────────────────────────────────────────────────
+    STRATEGY_COLORS = {
+        'Baseline': '#4878CF',
+        'TL':       '#6ACC65',
+        'PFT':      '#D65F5F',
+        'FFT':      '#B47CC7',
+    }
 
     _FOLDER_RE = re.compile(
         r'^(?P<id>\d+)_(?P<dataset>[^_]+(?:[-_]DB)?)_(?P<model>[^_]+)_'
@@ -109,6 +110,13 @@ class BaseComparisonHandler(BaseHandler):
 
         self._load()
 
+    @staticmethod
+    def _find_metrics_file(source: Path) -> Path:
+        candidates = sorted(source.glob('metrics_*.json'))
+        if candidates:
+            return candidates[0]
+        return source / 'metrics.json'
+
     def _load(self) -> None:
         folders = sorted([
             p for p in self.train_experiments_dir.iterdir()
@@ -117,7 +125,7 @@ class BaseComparisonHandler(BaseHandler):
         if not folders:
             raise FileNotFoundError(
                 f'No experiment folders found in {self.train_experiments_dir}. '
-                'Call ComparisonExperimentOrchestrator.unzip_experiments() first.'
+                'Call ComparisonOrchestrator.unzip_experiments() first.'
             )
         print(f'Found {len(folders)} experiment folders — loading ...')
         failed = []
@@ -140,15 +148,12 @@ class BaseComparisonHandler(BaseHandler):
             raise RuntimeError('No data loaded.')
         return self.df.copy()
 
-    # ── folder parsing ────────────────────────────────────────────────────────
-
     def _load_folder(self, folder: Path) -> Optional[ExperimentRecord]:
-        # unwrap nested folder with same name (ZIP extractall artifact)
+        """Load experiment data from a folder, handling possible nesting and missing files."""
         nested = folder / folder.name
         if nested.is_dir():
             folder = nested
 
-        # config files sit in archive/
         archive = folder / 'archive'
         source  = archive if archive.is_dir() else folder
 
@@ -165,7 +170,7 @@ class BaseComparisonHandler(BaseHandler):
             }
 
         config  = self._read_json(source / 'config.json')
-        metrics = self._read_json(source / 'metrics.json')
+        metrics = self._read_json(self._find_metrics_file(source))
         history = self._read_pickle(source / 'history.pkl')
 
         experiment_id = (metrics.get('experiment_id')
@@ -183,8 +188,6 @@ class BaseComparisonHandler(BaseHandler):
         elif 'AFFECT' in dataset.upper():
             dataset = 'AffectNet'
 
-        # normalize per_class_f1 keys across datasets
-        # (AffectNet uses 'Happy'/'Sad', others use 'Happiness'/'Sadness')
         raw_f1     = metrics.get('per_class_f1', {})
         normalized = {
             _CLASS_ALIASES.get(k.lower(), k): v
@@ -200,27 +203,56 @@ class BaseComparisonHandler(BaseHandler):
         )
 
     def _build_dataframe(self) -> pd.DataFrame:
+        """Build dataframe for each trained experiment."""
         rows = []
         for r in self.records:
+            val_acc   = r.history.get('val_accuracy', [])
+            train_acc = r.history.get('accuracy', [])
+
+            best_val_acc_from_history    = float(max(val_acc))   if val_acc   else None
+            actual_epochs_from_history   = len(val_acc)          if val_acc   else None
+            final_train_acc_from_history = float(train_acc[-1])  if train_acc else None
+            train_val_gap_from_history   = (
+                round(float(train_acc[-1]) - float(val_acc[-1]), 6)
+                if train_acc and val_acc else None
+            )
+
             row = {
-                'experiment_id': r.experiment_id,
-                'model':         r.model,
-                'dataset':       r.dataset,
-                'strategy':      r.strategy,
-                'test_accuracy': r.test_accuracy,
-                'test_f1_macro': r.test_f1_macro,
-                'precision_macro': r.metrics.get('precision_macro'),
-                'recall_macro':    r.metrics.get('recall_macro'),
-                'macro_auc':       r.metrics.get('macro_auc'),
+                'experiment_id':     r.experiment_id,
+                'model':             r.model,
+                'dataset':           r.dataset,
+                'strategy':          r.strategy,
+                'test_accuracy':     r.test_accuracy,
+                'test_f1_macro':     r.test_f1_macro,
+                'precision_macro':   r.metrics.get('precision_macro'),
+                'recall_macro':      r.metrics.get('recall_macro'),
+                'macro_auc':         r.metrics.get('macro_auc'),
+                'actual_epochs':     r.metrics.get('actual_epochs')        or actual_epochs_from_history,
+                'best_epoch':        r.metrics.get('best_epoch'),
+                'best_val_accuracy': r.metrics.get('best_val_accuracy')    or best_val_acc_from_history,
+                'best_val_loss':     r.metrics.get('best_val_loss'),
+                'train_val_gap':     r.metrics.get('train_val_gap')        or train_val_gap_from_history,
+                'final_train_acc':   r.metrics.get('final_train_accuracy') or final_train_acc_from_history,
+                'early_stopping':    r.metrics.get('early_stopping_triggered'),
+                'ece':               r.metrics.get('ece'),
+                'brier_score':       r.metrics.get('brier_score'),
+                'conf_correct':      r.metrics.get('confidence_mean_correct'),
+                'conf_incorrect':    r.metrics.get('confidence_mean_incorrect'),
             }
+
             for emo in self.EMOTION_CLASSES:
                 row[f'f1_{emo.lower()}'] = r.per_class_f1.get(emo)
+
             for vkey in self.TFLITE_VARIANTS:
                 vdata = r.tflite.get(vkey, {})
-                row[f'tflite_{vkey}_accuracy']   = vdata.get('accuracy')
-                row[f'tflite_{vkey}_size_kb']    = vdata.get('size_kb')
-                row[f'tflite_{vkey}_latency_ms'] = vdata.get('mean_latency_ms')
-                row[f'tflite_{vkey}_p95_ms']     = vdata.get('p95_latency_ms')
+                row[f'tflite_{vkey}_accuracy']          = vdata.get('accuracy')
+                row[f'tflite_{vkey}_size_kb']           = vdata.get('model_size_kb')
+                row[f'tflite_{vkey}_latency_ms']        = vdata.get('mean_inference_time_ms')
+                row[f'tflite_{vkey}_p95_ms']            = vdata.get('p95_inference_time_ms')
+                row[f'tflite_{vkey}_compression_ratio'] = vdata.get('compression_ratio')
+                row[f'tflite_{vkey}_accuracy_delta']    = vdata.get('accuracy_delta_vs_keras')
+                row[f'tflite_{vkey}_f1_macro']          = vdata.get('f1_macro')
+
             rows.append(row)
 
         df = pd.DataFrame(rows)
@@ -232,8 +264,6 @@ class BaseComparisonHandler(BaseHandler):
             if col in df.columns:
                 df[col] = pd.Categorical(df[col], categories=order, ordered=True)
         return df.sort_values(['model', 'dataset', 'strategy']).reset_index(drop=True)
-
-    # ── file readers ──────────────────────────────────────────────────────────
 
     @staticmethod
     def _read_json(path: Path) -> dict:
@@ -249,13 +279,9 @@ class BaseComparisonHandler(BaseHandler):
         with open(path, 'rb') as f:
             return pickle.load(f)
 
-    # ── guards ────────────────────────────────────────────────────────────────
-
     def _check_loaded(self) -> None:
         if self.df is None:
             raise RuntimeError('No data loaded.')
-
-    # ── summary (BaseHandler abstract) ────────────────────────────────────────
 
     def print_summary(self, mode: str = 'ascii') -> None:
         if self.df is None:

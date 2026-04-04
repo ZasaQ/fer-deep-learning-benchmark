@@ -379,7 +379,7 @@ class DatasetHandler(BaseHandler):
                 ax = axes[i, j]
                 if j < len(samples):
                     img = Image.open(os.path.join(class_path, samples[j]))
-                    ax.imshow(img, cmap='gray' if self.channels == 1 else None)
+                    ax.imshow(img, cmap='gray' if img.mode == 'L' else None)
                 ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
                 for spine in ax.spines.values():
                     spine.set_visible(False)
@@ -612,7 +612,7 @@ class DatasetHandler(BaseHandler):
             n_components=2,
             perplexity=min(perplexity, len(X) - 1),
             random_state=42,
-            max_iter=1000,
+            n_iter=1000,
             init='pca',
             learning_rate='auto',
         ).fit_transform(X)

@@ -58,6 +58,9 @@ class TrainExperimentOrchestrator:
         self._evaluation_handler        = None
         self._tflite_handler            = None
 
+        self.archive_directory: str = None
+        self.summaries_directory: str = None
+
         # populated by build_metrics() / archive_experiment()
         self.metrics: Optional[ExperimentMetrics] = None
 
@@ -112,10 +115,12 @@ class TrainExperimentOrchestrator:
 
     # ── configuration ────────────────────────────────────────
 
-    def configure_archive(self, dir_handler: DirectoryManager) -> None:
+    def configure_archive(self, archive_dir: str, summaries_dir: str) -> None:
         """Set archive_directory on self."""
-        self.archive_directory = dir_handler.get('archive')
+        self.archive_directory = archive_dir
+        self.summaries_directory = summaries_dir
         print(f'Archive directory configured: {self.archive_directory}')
+        print(f'Summaries directory configured: {self.summaries_directory}')
 
     # ── timing ───────────────────────────────────────────────
 

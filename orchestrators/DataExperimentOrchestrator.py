@@ -19,7 +19,6 @@ class DataExperimentOrchestrator():
 
     def __init__(self, config: dict):
         self._config          = config
-        self.archive_directory: Optional[str] = None
         self.timestamp_start = datetime.datetime.now()
         self.timestamp_stop: Optional[datetime.datetime] = None
         self.timestamp       = self.timestamp_start.strftime('%Y%m%d-%H%M%S')
@@ -32,6 +31,9 @@ class DataExperimentOrchestrator():
 
         self._dataset_handler           = None
         self._data_augmentation_handler = None
+
+        self.archive_directory: str = None
+        self.summaries_directory: str = None
 
         print('DataExperimentOrchestrator initialized.')
         print(f'Experiment name: {self.experiment_name}')
@@ -76,10 +78,12 @@ class DataExperimentOrchestrator():
 
     # ── configuration ────────────────────────────────────────
 
-    def configure_archive(self, dir_handler) -> None:
+    def configure_archive(self, archive_dir: str, summaries_dir: str) -> None:
         """Set archive_directory on self."""
-        self.archive_directory = dir_handler.get('archive')
+        self.archive_directory = archive_dir
+        self.summaries_directory = summaries_dir
         print(f'Archive directory configured: {self.archive_directory}')
+        print(f'Summaries directory configured: {self.summaries_directory}')
 
     # ── saving ────────────────────────────────────────────────
 
@@ -122,7 +126,7 @@ class DataExperimentOrchestrator():
         for h in [self._dataset_handler, self._data_augmentation_handler]:
             if h is not None:
                 try:
-                    h.generate_summary(mode='latex')
+                    h.generate_summary(mode='latex', output_dir=self.summaries_directory)
                 except NotImplementedError:
                     pass
                 except Exception as e:

@@ -682,6 +682,7 @@ class DatasetHandler(BaseHandler):
         overall_mean = np.mean(all_vals)
         upper_limit  = np.percentile(all_vals, 95) * 1.2
         ax1.set_ylim(0, upper_limit)
+        ax1.axhline(y=overall_mean, color='black', linestyle='--', alpha=0.7, zorder=1)
         ax1.annotate(
             f'Overall mean: {overall_mean:.1f}',
             xy=(0, overall_mean),

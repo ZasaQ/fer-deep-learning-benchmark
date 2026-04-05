@@ -682,10 +682,13 @@ class DatasetHandler(BaseHandler):
         overall_mean = np.mean(all_vals)
         upper_limit  = np.percentile(all_vals, 95) * 1.2
         ax1.set_ylim(0, upper_limit)
-        mean_line = ax1.axhline(overall_mean, color='black', linestyle='--', alpha=0.5,
-                                label=f'Overall mean: {overall_mean:.1f}')
-        ax1.legend(handles=[mean_line], loc='upper right', fontsize=8,
-                   framealpha=0.85, edgecolor='gray')
+        ax1.annotate(
+            f'Overall mean: {overall_mean:.1f}',
+            xy=(0, overall_mean),
+            xytext=(4, 4), textcoords='offset points',
+            fontsize=8, fontweight='bold', color='black',
+            ha='left', va='bottom',
+        )
         ax1.set_xticks(range(self.class_num))
         ax1.set_xticklabels(self.class_labels, rotation=45, ha='right')
         ax1.set_ylabel('Laplacian Variance')

@@ -40,7 +40,7 @@ This repository contains a systematic comparison of **5 deep learning architectu
 | **FER2013** | 35,887 | 7 | 48×48 | Grayscale | Noisy (crowd-sourced) | 2013 |
 | **CK+** | 981 | 7 | 128×128 | Grayscale | Clean (controlled lab) | 2010 |
 | **RAF-DB** | 15,339 | 7 | 128×128 | RGB | In-the-wild | 2017 |
-| **Affectnet** | ~30,000 | 7 | 128×128 | RGB | In-the-wild (balanced subset) | 2017 |
+| **Affectnet** | 26,171 | 7 | 128×128 | RGB | In-the-wild (balanced subset) | 2017 |
 
 ### Emotion Classes
 

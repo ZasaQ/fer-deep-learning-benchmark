@@ -835,34 +835,38 @@ class EvaluationHandler(EvaluationMetricsMixin, BaseHandler):
         def compute_gradcam(img_array: np.ndarray, class_idx: int) -> np.ndarray:
             inp = tf.cast(np.expand_dims(img_array, 0), tf.float32)
 
-            captured      = {}
-            original_call = conv_layer.call
-
-            def hooked_call(*args, **kwargs):
-                output = original_call(*args, **kwargs)
-                captured['output'] = output
-                return output
-
-            conv_layer.call = hooked_call
-
             try:
-                with tf.GradientTape() as tape:
-                    tape.watch(inp)
-                    predictions  = self.model(inp, training=False)
-                    loss         = predictions[:, class_idx]
-                    conv_outputs = captured['output']
-            finally:
-                conv_layer.call = original_call
+                conv_output_layer = self.model.get_layer(last_conv_layer_name)
+            except ValueError:
+                conv_output_layer = None
+                for layer in self.model.layers:
+                    if hasattr(layer, 'layers'):
+                        try:
+                            conv_output_layer = layer.get_layer(last_conv_layer_name)
+                            break
+                        except ValueError:
+                            pass
 
-            grads = tape.gradient(loss, conv_outputs)
+            if conv_output_layer is None:
+                return np.zeros((img_array.shape[0], img_array.shape[1]))
+
+            grad_model = tf.keras.Model(
+                inputs=self.model.inputs,
+                outputs=[conv_output_layer.output, self.model.output]
+            )
+
+            with tf.GradientTape() as tape:
+                conv_outputs, predictions = grad_model(inp, training=False)
+                loss = predictions[:, class_idx]
+
+            grads = tape.gradient(loss, conv_outputs)                 # [1, H, W, C]
 
             if grads is None:
                 return np.zeros((img_array.shape[0], img_array.shape[1]))
 
-            pooled = tf.reduce_mean(grads, axis=(0, 1, 2))
-            cam    = conv_outputs[0] @ pooled[..., tf.newaxis]
-            cam    = tf.squeeze(cam).numpy()
-            cam    = np.maximum(cam, 0)
+            pooled = tf.reduce_mean(grads, axis=(0, 1, 2))            # [C]
+            cam    = tf.reduce_sum(conv_outputs[0] * pooled, axis=-1) # [H, W]
+            cam    = tf.nn.relu(cam).numpy()
 
             if cam.max() > 0:
                 cam /= cam.max()

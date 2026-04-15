@@ -185,7 +185,7 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
         annot      = pivot_acc.map(lambda v: f'{v:.1%}' if pd.notna(v) else '')
 
         fig, ax = plt.subplots(figsize=figsize)
-        fig.suptitle('TFLite Mean Accuracy | Model × Quantization Variant', y=1.01)
+        fig.suptitle('TFLite Mean Accuracy | Model - TFLite Variant', y=1.01)
 
         sns.heatmap(
             pivot_acc.astype(float),
@@ -200,7 +200,7 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
             cbar_kws={'label': 'Mean Accuracy', 'shrink': 0.75},
             annot_kws={'size': 10},
         )
-        ax.set_xlabel('Quantization Variant', fontsize=10)
+        ax.set_xlabel('TFLite Variant', fontsize=10)
         ax.set_ylabel('Model', fontsize=10)
         ax.tick_params(axis='x', rotation=0)
         ax.tick_params(axis='y', rotation=0)
@@ -213,7 +213,7 @@ class ComparisonTFLiteHandler(BaseComparisonHandler):
         self._check_loaded()
 
         cr_cols = [f'tflite_{v}_compression_ratio' for v in self.TFLITE_VARIANTS]
-        ad_cols = [f'tflite_{v}_accuracy_delta'     for v in self.TFLITE_VARIANTS]
+        ad_cols = [f'tflite_{v}_accuracy_delta'    for v in self.TFLITE_VARIANTS]
 
         has_cr = any(c in self.df.columns and self.df[c].notna().any() for c in cr_cols)
         has_ad = any(c in self.df.columns and self.df[c].notna().any() for c in ad_cols)
